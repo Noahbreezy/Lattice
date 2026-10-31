@@ -106,6 +106,21 @@ SQLite is used only to keep local development dependency-free. The repository
 interface is designed for a PostgreSQL implementation when the server API and
 deployment are introduced.
 
+## Retention settings
+
+The `production.retention` section controls counts independently:
+
+- `max_cloud_videos`: maximum completed video artifacts in object storage.
+- `max_server_videos`: maximum completed video artifacts on server disk.
+- `max_approved_videos`: maximum approved videos retained.
+- `max_rejected_videos`: maximum rejected videos retained.
+- `max_awaiting_review_videos`: maximum videos waiting for review.
+
+Use `null` for unlimited. Limits are counts, not sizes. The retention planner
+selects the oldest excess artifacts and returns deletion candidates; it does
+not delete files automatically. A production worker must audit and verify each
+candidate before deletion.
+
 ## Documentation rule
 
 When configuration fields, workflow stages, or public APIs change, update this

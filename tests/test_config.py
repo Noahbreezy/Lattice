@@ -14,6 +14,7 @@ class ProjectConfigTests(unittest.TestCase):
         self.assertEqual(config.channel_name, "A New Thing")
         self.assertEqual(config.video_length_seconds, 75)
         self.assertIn("The idea", config.required_sections)
+        self.assertEqual(config.retention.max_server_videos, 5)
 
     def test_rejects_invalid_video_length(self) -> None:
         with self.assertRaisesRegex(ConfigError, "video_length_seconds"):
@@ -41,6 +42,28 @@ class ProjectConfigTests(unittest.TestCase):
             path.write_text("{", encoding="utf-8")
             with self.assertRaisesRegex(ConfigError, "Invalid JSON"):
                 load_config(path)
+
+    def test_rejects_negative_retention_limit(self) -> None:
+        raw = {
+            "project": {"name": "x", "description": "x"},
+            "content": {
+                "channel_name": "x",
+                "format": "x",
+                "prompt": "x",
+                "required_sections": ["x"],
+                "subject_areas": ["x"],
+                "learning_rules": ["x"],
+            },
+            "production": {
+                "video_length_seconds": 60,
+                "traits": ["x"],
+                "workflow": ["x"],
+                "ai_tools": [],
+                "retention": {"max_cloud_videos": -1},
+            },
+        }
+        with self.assertRaisesRegex(ConfigError, "max_cloud_videos"):
+            ProjectConfig.from_mapping(raw)
 
 
 if __name__ == "__main__":

@@ -13,6 +13,33 @@ class ConfigError(ValueError):
 
 
 @dataclass(frozen=True)
+class RetentionSettings:
+    """Optional video-count limits; ``None`` means unlimited."""
+
+    max_cloud_videos: int | None = 100
+    max_server_videos: int | None = 5
+    max_approved_videos: int | None = 100
+    max_rejected_videos: int | None = 20
+    max_awaiting_review_videos: int | None = 10
+
+    def __post_init__(self) -> None:
+        for field in (
+            "max_cloud_videos",
+            "max_server_videos",
+            "max_approved_videos",
+            "max_rejected_videos",
+            "max_awaiting_review_videos",
+        ):
+            limit = getattr(self, field)
+            if limit is not None and (
+                not isinstance(limit, int) or isinstance(limit, bool) or limit < 0
+            ):
+                raise ConfigError(
+                    f"{field} must be a non-negative integer or null."
+                )
+
+
+@dataclass(frozen=True)
 class ProjectConfig:
     """Validated configuration shared by planning, writing, and production stages."""
 
@@ -29,6 +56,7 @@ class ProjectConfig:
     topic_seeds: tuple[dict[str, str], ...]
     ai_tools: tuple[dict[str, Any], ...]
     workflow: tuple[str, ...]
+    retention: RetentionSettings = RetentionSettings()
 
     @classmethod
     def from_mapping(cls, raw: MappingLike) -> "ProjectConfig":
@@ -61,6 +89,7 @@ class ProjectConfig:
         topic_seeds = _optional_topic_seeds(content.get("topic_seeds"))
         workflow = _required_strings(production, "workflow", "production")
         ai_tools = _required_tools(production.get("ai_tools"))
+        retention = _optional_retention(production.get("retention"))
 
         return cls(
             name=name,
@@ -76,6 +105,7 @@ class ProjectConfig:
             topic_seeds=topic_seeds,
             ai_tools=ai_tools,
             workflow=workflow,
+            retention=retention,
         )
 
 
@@ -164,3 +194,28 @@ def _optional_topic_seeds(value: Any) -> tuple[dict[str, str], ...]:
             )
         topics.append({"title": title.strip(), "subject_area": subject_area.strip()})
     return tuple(topics)
+
+
+def _optional_retention(value: Any) -> RetentionSettings:
+    if value is None:
+        return RetentionSettings()
+    if not isinstance(value, dict):
+        raise ConfigError("production.retention must be an object.")
+    fields = (
+        "max_cloud_videos",
+        "max_server_videos",
+        "max_approved_videos",
+        "max_rejected_videos",
+        "max_awaiting_review_videos",
+    )
+    limits: dict[str, int | None] = {}
+    for field in fields:
+        limit = value.get(field)
+        if limit is not None and (
+            not isinstance(limit, int) or isinstance(limit, bool) or limit < 0
+        ):
+            raise ConfigError(
+                f"production.retention.{field} must be a non-negative integer or null."
+            )
+        limits[field] = limit
+    return RetentionSettings(**limits)
