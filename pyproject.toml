@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lattice-video"
+version = "0.1.0"
+description = "Configurable framework for producing short-form educational videos."
+requires-python = ">=3.11"
+
+[project.scripts]
+lattice-validate = "lattice.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

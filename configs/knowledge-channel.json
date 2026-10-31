@@ -1,0 +1,101 @@
+{
+  "project": {
+    "name": "connected-knowledge",
+    "description": "Short-form videos that build a connected mental model of the world.",
+    "version": 1
+  },
+  "content": {
+    "channel_name": "A New Thing",
+    "format": "short-form educational explainer",
+    "prompt": "Choose one genuinely useful concept from a broad field of knowledge. Prioritize explanatory power over trivia, avoid repeating prior lessons, and connect the idea to other fields when useful. Distinguish established knowledge from uncertainty.",
+    "required_sections": [
+      "The idea",
+      "Why it matters",
+      "How it works / what happened",
+      "A concrete example",
+      "Common misconception",
+      "Connection",
+      "One thing worth remembering"
+    ],
+    "subject_areas": [
+      "culture and societies",
+      "biology and evolution",
+      "physics and chemistry",
+      "astronomy, earth science, and geology",
+      "medicine, public health, psychology, and neuroscience",
+      "history, politics, economics, and institutions",
+      "technology, engineering, mathematics, and computing",
+      "geography, linguistics, religion, archaeology, ecology, agriculture, energy, and urban planning"
+    ],
+    "learning_rules": [
+      "Gradually increase difficulty and do not repeat lessons.",
+      "Use cause-and-effect chains, incentives, tradeoffs, and second-order effects when relevant.",
+      "Separate biological, cultural, economic, historical, and institutional explanations.",
+      "For history, distinguish consensus from competing interpretations and incomplete evidence.",
+      "For science, distinguish consensus, supported theories, emerging evidence, debates, hypotheses, and speculation."
+    ],
+    "topic_seeds": [
+      {
+        "title": "Why incentives can produce unintended outcomes",
+        "subject_area": "economics and institutions"
+      },
+      {
+        "title": "How feedback loops shape ecosystems",
+        "subject_area": "ecology and the environment"
+      },
+      {
+        "title": "Why maps change what governments can do",
+        "subject_area": "geography and politics"
+      }
+    ]
+  },
+  "production": {
+    "video_length_seconds": 75,
+    "traits": [
+      "clear",
+      "curious",
+      "accurate",
+      "non-partisan",
+      "specific",
+      "visually explainable",
+      "high information density without rushing"
+    ],
+    "workflow": [
+      "select topic",
+      "research and source claims",
+      "write lesson",
+      "review for accuracy and uncertainty",
+      "create visual plan",
+      "generate assets",
+      "assemble and caption video",
+      "human quality review",
+      "publish and record lesson history"
+    ],
+    "ai_tools": [
+      {
+        "name": "research assistant",
+        "purpose": "Find and summarize authoritative sources; never publish unsupported claims.",
+        "provider": null,
+        "required": true
+      },
+      {
+        "name": "script model",
+        "purpose": "Turn approved research into the configured lesson structure.",
+        "provider": null,
+        "required": true
+      },
+      {
+        "name": "video generator",
+        "purpose": "Generate or animate visual assets and scenes.",
+        "provider": "higgsfield",
+        "required": false
+      },
+      {
+        "name": "editor",
+        "purpose": "Assemble scenes, narration, music, and captions.",
+        "provider": null,
+        "required": true
+      }
+    ]
+  }
+}
