@@ -73,3 +73,18 @@ class EpisodeRepositoryTests(unittest.TestCase):
         self.assertEqual(persisted.final_video_uri, "private://final.mp4")
         with self.assertRaises(LookupError):
             self.repository.claim_next()
+
+    def test_stale_review_decision_is_not_recorded(self) -> None:
+        episode = Episode("episode-1", self.topic, EpisodeStatus.PROCESSING, 1)
+        self.repository.save(episode)
+        awaiting = self.repository.submit_for_review(episode, "private://final.mp4")
+        self.repository.decide(awaiting, "owner-subject", ReviewDecision.APPROVE)
+
+        with self.assertRaisesRegex(ValueError, "changed"):
+            self.repository.decide(
+                awaiting,
+                "owner-subject",
+                ReviewDecision.REJECT,
+                "This decision is stale.",
+            )
+        self.assertEqual(len(self.repository.reviews_for("episode-1")), 1)

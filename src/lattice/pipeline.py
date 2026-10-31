@@ -17,13 +17,10 @@ class EpisodeDraft:
 
 
 def select_topic(config: ProjectConfig, history: LessonHistory) -> Topic:
-    """Select the first configured topic not already present in lesson history."""
+    """Atomically reserve the first configured topic not in lesson history."""
 
-    for seed in config.topic_seeds:
-        topic = Topic(seed["title"], seed["subject_area"])
-        if not history.has_topic(topic):
-            return topic
-    raise ValueError("No unused topic seeds remain; add more topics or start a new project.")
+    topics = (Topic(seed["title"], seed["subject_area"]) for seed in config.topic_seeds)
+    return history.reserve_next(topics)
 
 
 def build_research_packet(topic: Topic) -> ResearchPacket:

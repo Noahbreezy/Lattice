@@ -65,6 +65,30 @@ class ProjectConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(ConfigError, "max_cloud_videos"):
             ProjectConfig.from_mapping(raw)
 
+    def test_partial_retention_keeps_default_limits(self) -> None:
+        raw = {
+            "project": {"name": "x", "description": "x"},
+            "content": {
+                "channel_name": "x",
+                "format": "x",
+                "prompt": "x",
+                "required_sections": ["x"],
+                "subject_areas": ["x"],
+                "learning_rules": ["x"],
+            },
+            "production": {
+                "video_length_seconds": 60,
+                "traits": ["x"],
+                "workflow": ["x"],
+                "ai_tools": [],
+                "retention": {"max_server_videos": 1},
+            },
+        }
+        retention = ProjectConfig.from_mapping(raw).retention
+        self.assertEqual(retention.max_server_videos, 1)
+        self.assertEqual(retention.max_cloud_videos, 100)
+        self.assertEqual(retention.max_approved_videos, 100)
+
 
 if __name__ == "__main__":
     unittest.main()

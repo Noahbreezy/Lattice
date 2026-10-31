@@ -208,9 +208,10 @@ def _optional_retention(value: Any) -> RetentionSettings:
         "max_rejected_videos",
         "max_awaiting_review_videos",
     )
+    defaults = RetentionSettings()
     limits: dict[str, int | None] = {}
     for field in fields:
-        limit = value.get(field)
+        limit = value.get(field, getattr(defaults, field))
         if limit is not None and (
             not isinstance(limit, int) or isinstance(limit, bool) or limit < 0
         ):

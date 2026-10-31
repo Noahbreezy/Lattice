@@ -39,6 +39,15 @@ class PipelineTests(unittest.TestCase):
             second = create_episode_draft(self.config, history)
             self.assertNotEqual(first.topic.key, second.topic.key)
 
+    def test_topic_is_reserved_when_draft_is_created(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "history.json"
+            first_history = LessonHistory(path)
+            second_history = LessonHistory(path)
+            first = create_episode_draft(self.config, first_history)
+            second = create_episode_draft(self.config, second_history)
+            self.assertNotEqual(first.topic.key, second.topic.key)
+
     def test_history_is_persisted_as_json(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "nested" / "history.json"

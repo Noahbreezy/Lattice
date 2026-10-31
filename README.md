@@ -82,6 +82,10 @@ The contract and infrastructure direction is documented in
 must replace the placeholder research stage, attach real citations to claims,
 and add human review before publication.
 
+The project has mirrored domain documentation under [`docs/`](docs/README.md).
+Each page follows the corresponding source, configuration, or test path so
+that implementation behavior and its documentation can be navigated together.
+
 The planned production mode is a private server-hosted review app. Finished
 videos will be stored in private object storage, approved videos will remain
 available for later upload, and rejected videos will return to the front of

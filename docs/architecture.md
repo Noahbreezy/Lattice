@@ -1,5 +1,8 @@
 # Lattice architecture
 
+For module-level behavior, see the mirrored documentation index in
+[`docs/README.md`](README.md).
+
 Lattice is organized around a provider-independent content pipeline. A
 configuration defines the behavior of a project; each production stage emits a
 versioned artifact that can be inspected, approved, retried, or replaced.

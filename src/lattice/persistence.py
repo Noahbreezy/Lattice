@@ -143,7 +143,7 @@ class EpisodeRepository:
             created_at=episode.created_at or now_utc(),
         )
         with self._connection:
-            self._connection.execute(
+            cursor = self._connection.execute(
                 """
                 UPDATE episodes
                 SET status = ?, queue_priority = ?, queue_feedback = ?
@@ -157,6 +157,10 @@ class EpisodeRepository:
                     EpisodeStatus.AWAITING_REVIEW.value,
                 ),
             )
+            if cursor.rowcount != 1:
+                raise ValueError(
+                    "The episode changed before this review decision was saved."
+                )
             self._connection.execute(
                 """
                 INSERT INTO reviews
