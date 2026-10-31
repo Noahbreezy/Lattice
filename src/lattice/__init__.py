@@ -15,6 +15,7 @@ from .contracts import (
 )
 from .history import LessonHistory
 from .pipeline import EpisodeDraft, create_episode_draft
+from .persistence import EpisodeRepository
 from .review import QueueItem, ReviewQueue
 
 __all__ = [
@@ -23,6 +24,7 @@ __all__ = [
     "EpisodeDraft",
     "Episode",
     "EpisodeStatus",
+    "EpisodeRepository",
     "LessonHistory",
     "ProjectConfig",
     "ResearchPacket",
