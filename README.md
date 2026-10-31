@@ -6,6 +6,14 @@ video traits, production workflow, and optional AI tools. The framework is
 intended to support many video formats; the included knowledge channel is only
 an example configuration.
 
+## Branching strategy
+
+`main` is the latest integrated version and should remain deployable. New work
+must use a feature branch named with the `feature/` prefix, for example
+`feature/server-review-queue` or `feature/provider-integrations`. Merge feature
+branches into `main` through a pull request after tests pass. Do not develop
+directly on `main`.
+
 ## Status
 
 The current slice provides dependency-free configuration and content contracts,
