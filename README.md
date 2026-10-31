@@ -17,9 +17,9 @@ directly on `main`.
 ## Status
 
 The current slice provides dependency-free configuration and content contracts,
-a local topic/history store, and a deterministic development pipeline from
-topic selection through a structured script. Its research data is explicitly
-provisional and must not be published.
+a local topic/history store, a deterministic development pipeline, and a
+SQLite persistence adapter for server-oriented episode/review state. Its
+research data is explicitly provisional and must not be published.
 
 ## Quick start
 
@@ -88,6 +88,38 @@ available for later upload, and rejected videos will return to the front of
 the processing queue with required reviewer feedback. Authentication and
 authorization are server responsibilities; credentials must never be embedded
 in browser code or committed configuration.
+
+The local persistence adapter can be exercised with:
+
+```powershell
+$env:PYTHONPATH = "src"
+@'
+from lattice import EpisodeRepository
+
+repository = EpisodeRepository("var/lattice.sqlite")
+print("Persistence schema initialized")
+repository.close()
+'@ | python -
+```
+
+SQLite is used only to keep local development dependency-free. The repository
+interface is designed for a PostgreSQL implementation when the server API and
+deployment are introduced.
+
+## Retention settings
+
+The `production.retention` section controls counts independently:
+
+- `max_cloud_videos`: maximum completed video artifacts in object storage.
+- `max_server_videos`: maximum completed video artifacts on server disk.
+- `max_approved_videos`: maximum approved videos retained.
+- `max_rejected_videos`: maximum rejected videos retained.
+- `max_awaiting_review_videos`: maximum videos waiting for review.
+
+Use `null` for unlimited. Limits are counts, not sizes. The retention planner
+selects the oldest excess artifacts and returns deletion candidates; it does
+not delete files automatically. A production worker must audit and verify each
+candidate before deletion.
 
 ## Documentation rule
 

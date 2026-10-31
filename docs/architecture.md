@@ -92,6 +92,30 @@ before comparison, so punctuation and capitalization do not create false
 novelty. This store will later be replaced by PostgreSQL without changing the
 pipeline contracts.
 
+Episode and review persistence is available through
+[`src/lattice/persistence.py`](../src/lattice/persistence.py). It stores episode
+status, private video references, queue priority, rejection feedback, and
+immutable reviews in SQLite. Rejected episodes receive a lower queue priority,
+so `claim_next()` returns them before untouched work. The adapter is local
+development infrastructure; production should provide the same domain API
+using PostgreSQL transactions and a connection pool.
+
+## Storage retention
+
+Large media belongs in private object storage, while server disk is temporary
+working space. Project-specific count limits live under
+`production.retention`. Cloud/server limits control physical location;
+approved/rejected/awaiting-review limits control lifecycle state. A video can
+exceed more than one limit, but the planner emits one deletion action per
+artifact.
+
+[`src/lattice/retention.py`](../src/lattice/retention.py) selects the oldest
+excess artifacts without deleting them. This separation is intentional:
+workers must audit the action, avoid deleting an actively processed or
+reviewed artifact, and preserve the final approved master according to the
+project policy. Future PostgreSQL records should keep storage location, object
+key, size, checksum, and deletion audit metadata.
+
 ## Long-term infrastructure
 
 - Python: API, orchestration, research, provider adapters, and quality checks.
