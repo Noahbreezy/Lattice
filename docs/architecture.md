@@ -100,6 +100,22 @@ so `claim_next()` returns them before untouched work. The adapter is local
 development infrastructure; production should provide the same domain API
 using PostgreSQL transactions and a connection pool.
 
+## Storage retention
+
+Large media belongs in private object storage, while server disk is temporary
+working space. Project-specific count limits live under
+`production.retention`. Cloud/server limits control physical location;
+approved/rejected/awaiting-review limits control lifecycle state. A video can
+exceed more than one limit, but the planner emits one deletion action per
+artifact.
+
+[`src/lattice/retention.py`](../src/lattice/retention.py) selects the oldest
+excess artifacts without deleting them. This separation is intentional:
+workers must audit the action, avoid deleting an actively processed or
+reviewed artifact, and preserve the final approved master according to the
+project policy. Future PostgreSQL records should keep storage location, object
+key, size, checksum, and deletion audit metadata.
+
 ## Long-term infrastructure
 
 - Python: API, orchestration, research, provider adapters, and quality checks.

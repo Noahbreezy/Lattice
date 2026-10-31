@@ -96,6 +96,13 @@
         "provider": null,
         "required": true
       }
-    ]
+    ],
+    "retention": {
+      "max_cloud_videos": 100,
+      "max_server_videos": 5,
+      "max_approved_videos": 100,
+      "max_rejected_videos": 20,
+      "max_awaiting_review_videos": 10
+    }
   }
 }
