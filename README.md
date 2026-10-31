@@ -17,9 +17,9 @@ directly on `main`.
 ## Status
 
 The current slice provides dependency-free configuration and content contracts,
-a local topic/history store, and a deterministic development pipeline from
-topic selection through a structured script. Its research data is explicitly
-provisional and must not be published.
+a local topic/history store, a deterministic development pipeline, and a
+SQLite persistence adapter for server-oriented episode/review state. Its
+research data is explicitly provisional and must not be published.
 
 ## Quick start
 
@@ -88,6 +88,23 @@ available for later upload, and rejected videos will return to the front of
 the processing queue with required reviewer feedback. Authentication and
 authorization are server responsibilities; credentials must never be embedded
 in browser code or committed configuration.
+
+The local persistence adapter can be exercised with:
+
+```powershell
+$env:PYTHONPATH = "src"
+@'
+from lattice import EpisodeRepository
+
+repository = EpisodeRepository("var/lattice.sqlite")
+print("Persistence schema initialized")
+repository.close()
+'@ | python -
+```
+
+SQLite is used only to keep local development dependency-free. The repository
+interface is designed for a PostgreSQL implementation when the server API and
+deployment are introduced.
 
 ## Documentation rule
 

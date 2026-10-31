@@ -92,6 +92,14 @@ before comparison, so punctuation and capitalization do not create false
 novelty. This store will later be replaced by PostgreSQL without changing the
 pipeline contracts.
 
+Episode and review persistence is available through
+[`src/lattice/persistence.py`](../src/lattice/persistence.py). It stores episode
+status, private video references, queue priority, rejection feedback, and
+immutable reviews in SQLite. Rejected episodes receive a lower queue priority,
+so `claim_next()` returns them before untouched work. The adapter is local
+development infrastructure; production should provide the same domain API
+using PostgreSQL transactions and a connection pool.
+
 ## Long-term infrastructure
 
 - Python: API, orchestration, research, provider adapters, and quality checks.
