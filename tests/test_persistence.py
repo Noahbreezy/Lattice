@@ -88,3 +88,25 @@ class EpisodeRepositoryTests(unittest.TestCase):
                 "This decision is stale.",
             )
         self.assertEqual(len(self.repository.reviews_for("episode-1")), 1)
+
+    def test_jobs_are_idempotent_and_retryable(self) -> None:
+        first = self.repository.enqueue_job("job-1", "render", "episode-1:v1", "{}")
+        duplicate = self.repository.enqueue_job("job-duplicate", "render", "episode-1:v1", "{}")
+        self.assertEqual(first.id, duplicate.id)
+        claimed = self.repository.claim_job("render")
+        self.assertEqual(claimed.status, "running")
+        self.assertEqual(claimed.attempts, 1)
+        retried = self.repository.fail_job(claimed.id, "provider timeout")
+        self.assertEqual(retried.status, "queued")
+        claimed_again = self.repository.claim_job()
+        self.assertEqual(claimed_again.attempts, 2)
+        completed = self.repository.complete_job(claimed_again.id)
+        self.assertEqual(completed.status, "succeeded")
+
+    def test_failed_job_can_be_dead_lettered(self) -> None:
+        self.repository.enqueue_job("job-1", "research", "episode-1:v1")
+        claimed = self.repository.claim_job()
+        failed = self.repository.fail_job(claimed.id, "invalid source response", retry=False)
+        self.assertEqual(failed.status, "failed")
+        with self.assertRaises(LookupError):
+            self.repository.claim_job()

@@ -26,9 +26,19 @@ domains.
 configuration
     -> topic selection and lesson history
     -> research packet and script contracts
+    -> storyboard, assets, render job, and published video contracts
     -> episode/review workflow
     -> persistence and retention planning
 ```
+
+Local operational adapters include the FFmpeg renderer and standard-library
+review API. Both are development boundaries for later object storage, worker,
+authentication, and PostgreSQL integrations.
+
+The review API is documented in [`src/lattice/local_api.md`](src/lattice/local_api.md),
+and the local media path is documented in
+[`src/lattice/renderer.md`](src/lattice/renderer.md).
+The local job runner is documented in [`src/lattice/worker.md`](src/lattice/worker.md).
 
 The local research packet is provisional. It must not be published without a
 real research provider, source verification, and human review.

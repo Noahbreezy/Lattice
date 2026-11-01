@@ -7,6 +7,22 @@ development flow:
 ProjectConfig -> Topic -> ResearchPacket -> Script
 ```
 
+The deterministic local adapter also provides the planned production stages:
+
+```text
+Script -> Storyboard -> AssetManifest -> RenderJob -> PublishedVideo
+```
+
+`build_storyboard`, `build_asset_manifest`, `create_render_job`, and
+`publish_video` emit version-one contracts with provenance links and SHA-256
+content hashes. They use local placeholder assets and a provider-neutral
+`RenderProvider` protocol; no vendor API is embedded in the domain model.
+
+`ResearchProvider` in `research.py` is the boundary for a real source
+retrieval integration. `validate_research` and the quality checks in
+`quality.py` reject placeholder or unverified evidence before publication and
+check script structure, duration, and claim coverage.
+
 `select_topic` atomically reserves the first configured seed absent from
 `LessonHistory`, preventing concurrent workers from selecting the same topic.
 `build_research_packet` currently creates a clearly unverified placeholder

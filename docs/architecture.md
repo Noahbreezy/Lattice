@@ -33,6 +33,16 @@ Script
   -> PublishedVideo
 ```
 
+The local development adapter now emits these contracts deterministically.
+Every artifact carries a version and provenance metadata including configuration
+hash, prompt version, provider/model identifier, input artifact IDs, content
+hash, UTC timestamps, and approval state where applicable. Render jobs only
+advance through valid states, and a video artifact can only be created from a
+succeeded job. Provider implementations remain behind capability interfaces.
+Research providers implement `ResearchProvider`, while `quality.py` provides a
+deterministic gate for source evidence, script structure, duration, and claim
+coverage before media production.
+
 ## Server-hosted review workflow
 
 The long-term product is a server-hosted application, not a local-only video
@@ -101,7 +111,9 @@ status, private video references, queue priority, rejection feedback, and
 immutable reviews in SQLite. Rejected episodes receive a lower queue priority,
 so `claim_next()` returns them before untouched work. The adapter is local
 development infrastructure; production should provide the same domain API
-using PostgreSQL transactions and a connection pool.
+using PostgreSQL transactions and a connection pool. It also provides
+idempotent durable jobs with attempt counts and retry/dead-letter transitions,
+which can back an initial worker implementation.
 
 ## Storage retention
 
@@ -136,7 +148,7 @@ throughout the domain model.
 
 ## Provenance and approvals
 
-Future persistent artifacts should record configuration version, prompt version,
-provider/model, input artifact IDs, content hash, timestamps, and human
-approval state. AI review and human approval must remain separate states,
-especially for medical, political, historical, and scientific content.
+Persistent artifacts record configuration version, prompt version, provider/model,
+input artifact IDs, content hash, timestamps, and human approval state. AI
+review and human approval must remain separate states, especially for medical,
+political, historical, and scientific content.

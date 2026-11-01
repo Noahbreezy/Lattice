@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+import hashlib
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +58,41 @@ class ProjectConfig:
     ai_tools: tuple[dict[str, Any], ...]
     workflow: tuple[str, ...]
     retention: RetentionSettings = RetentionSettings()
+
+    @property
+    def config_version(self) -> str:
+        """Return the configuration schema version used by this model."""
+
+        return "1"
+
+    @property
+    def config_hash(self) -> str:
+        """Return a stable hash for this validated configuration."""
+
+        payload = {
+            "name": self.name,
+            "description": self.description,
+            "channel_name": self.channel_name,
+            "format": self.format,
+            "video_length_seconds": self.video_length_seconds,
+            "lesson_prompt": self.lesson_prompt,
+            "traits": self.traits,
+            "required_sections": self.required_sections,
+            "subject_areas": self.subject_areas,
+            "learning_rules": self.learning_rules,
+            "topic_seeds": self.topic_seeds,
+            "ai_tools": self.ai_tools,
+            "workflow": self.workflow,
+            "retention": asdict(self.retention),
+        }
+        serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+    @property
+    def prompt_version(self) -> str:
+        """Return the version of the configured content prompt."""
+
+        return "1"
 
     @classmethod
     def from_mapping(cls, raw: MappingLike) -> "ProjectConfig":

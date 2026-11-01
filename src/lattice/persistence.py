@@ -3,9 +3,25 @@
 from __future__ import annotations
 
 import sqlite3
+import hashlib
 from pathlib import Path
+from dataclasses import dataclass
 
 from .contracts import Episode, EpisodeStatus, Review, ReviewDecision, Topic, now_utc
+
+
+@dataclass(frozen=True)
+class Job:
+    """Durable work item suitable for a database-backed worker."""
+
+    id: str
+    kind: str
+    idempotency_key: str
+    status: str
+    attempts: int
+    payload: str
+    error: str = ""
+    lease_until: str = ""
 
 
 class EpisodeRepository:
@@ -16,7 +32,7 @@ class EpisodeRepository:
     """
 
     def __init__(self, path: str | Path = ":memory:") -> None:
-        self._connection = sqlite3.connect(str(path))
+        self._connection = sqlite3.connect(str(path), check_same_thread=False)
         self._connection.row_factory = sqlite3.Row
         self._connection.execute("PRAGMA foreign_keys = ON")
         self._connection.execute("PRAGMA journal_mode = WAL")
@@ -64,6 +80,12 @@ class EpisodeRepository:
             "SELECT * FROM episodes WHERE id = ?", (episode_id,)
         ).fetchone()
         return _episode_from_row(row) if row else None
+
+    def list_episodes(self) -> tuple[Episode, ...]:
+        rows = self._connection.execute(
+            "SELECT * FROM episodes ORDER BY created_at ASC, id ASC"
+        ).fetchall()
+        return tuple(_episode_from_row(row) for row in rows)
 
     def claim_next(self) -> Episode:
         """Atomically claim the highest-priority queued episode."""
@@ -192,6 +214,119 @@ class EpisodeRepository:
             for row in rows
         )
 
+    def enqueue_job(self, job_id: str, kind: str, idempotency_key: str, payload: str = "") -> Job:
+        """Insert a queued job, returning the existing job for duplicate requests."""
+
+        with self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO jobs (id, kind, idempotency_key, status, attempts, payload)
+                VALUES (?, ?, ?, 'queued', 0, ?)
+                ON CONFLICT(idempotency_key) DO NOTHING
+                """,
+                (job_id, kind, idempotency_key, payload),
+            )
+        row = self._connection.execute(
+            "SELECT * FROM jobs WHERE idempotency_key = ?", (idempotency_key,)
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("Job disappeared after enqueue.")
+        return _job_from_row(row)
+
+    def claim_job(self, kind: str | None = None) -> Job:
+        """Atomically claim the oldest queued job and increment its attempt count."""
+
+        with self._connection:
+            query = "SELECT * FROM jobs WHERE status = 'queued'"
+            params: tuple[str, ...] = ()
+            if kind is not None:
+                query += " AND kind = ?"
+                params = (kind,)
+            query += " ORDER BY created_at ASC LIMIT 1"
+            row = self._connection.execute(query, params).fetchone()
+            if row is None:
+                raise LookupError("The job queue is empty.")
+            self._connection.execute(
+                "UPDATE jobs SET status = 'running', attempts = attempts + 1, lease_until = datetime('now', '+15 minutes') WHERE id = ?",
+                (row["id"],),
+            )
+        claimed = self._connection.execute(
+            "SELECT * FROM jobs WHERE id = ?", (row["id"],)
+        ).fetchone()
+        if claimed is None:
+            raise RuntimeError("Job disappeared while being claimed.")
+        return _job_from_row(claimed)
+
+    def complete_job(self, job_id: str) -> Job:
+        return self._update_job_status(job_id, "succeeded")
+
+    def fail_job(self, job_id: str, error: str, retry: bool = True) -> Job:
+        if not error.strip():
+            raise ValueError("A job failure must include an error.")
+        return self._update_job_status(job_id, "queued" if retry else "failed", error)
+
+    def _update_job_status(self, job_id: str, status: str, error: str = "") -> Job:
+        with self._connection:
+            cursor = self._connection.execute(
+                "UPDATE jobs SET status = ?, error = ? WHERE id = ? AND status = 'running'",
+                (status, error, job_id),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("Job is not currently running or does not exist.")
+        row = self._connection.execute(
+            "SELECT * FROM jobs WHERE id = ?", (job_id,)
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("Job disappeared after update.")
+        return _job_from_row(row)
+
+    def heartbeat_job(self, job_id: str, lease_minutes: int = 15) -> Job:
+        if lease_minutes < 1:
+            raise ValueError("lease_minutes must be positive.")
+        with self._connection:
+            cursor = self._connection.execute(
+                "UPDATE jobs SET lease_until = datetime('now', ?) WHERE id = ? AND status = 'running'",
+                (f"+{lease_minutes} minutes", job_id),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("Job is not currently running or does not exist.")
+        return self._get_job(job_id)
+
+    def recover_stale_jobs(self) -> tuple[Job, ...]:
+        with self._connection:
+            rows = self._connection.execute(
+                "SELECT id FROM jobs WHERE status = 'running' AND lease_until < datetime('now')"
+            ).fetchall()
+            self._connection.execute(
+                "UPDATE jobs SET status = 'queued', error = 'Worker lease expired', lease_until = '' "
+                "WHERE status = 'running' AND lease_until < datetime('now')"
+            )
+        return tuple(self._get_job(row["id"]) for row in rows)
+
+    def record_audit(self, event_type: str, subject_id: str, details: str = "") -> None:
+        if not event_type.strip() or not subject_id.strip():
+            raise ValueError("Audit event type and subject are required.")
+        with self._connection:
+            self._connection.execute(
+                "INSERT INTO audit_events (event_type, subject_id, details, created_at) VALUES (?, ?, ?, ?)",
+                (event_type, subject_id, details, now_utc()),
+            )
+
+    def audit_events(self, subject_id: str | None = None) -> tuple[dict[str, str], ...]:
+        if subject_id is None:
+            rows = self._connection.execute("SELECT * FROM audit_events ORDER BY id").fetchall()
+        else:
+            rows = self._connection.execute(
+                "SELECT * FROM audit_events WHERE subject_id = ? ORDER BY id", (subject_id,)
+            ).fetchall()
+        return tuple(dict(row) for row in rows)
+
+    def _get_job(self, job_id: str) -> Job:
+        row = self._connection.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        if row is None:
+            raise RuntimeError("Job disappeared after update.")
+        return _job_from_row(row)
+
     def _create_schema(self) -> None:
         self._connection.executescript(
             """
@@ -216,8 +351,32 @@ class EpisodeRepository:
               feedback TEXT NOT NULL DEFAULT '',
               created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS jobs (
+              id TEXT PRIMARY KEY,
+              kind TEXT NOT NULL,
+              idempotency_key TEXT NOT NULL UNIQUE,
+              status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'succeeded', 'failed')),
+              attempts INTEGER NOT NULL CHECK (attempts >= 0),
+              payload TEXT NOT NULL DEFAULT '',
+              error TEXT NOT NULL DEFAULT '',
+              lease_until TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS jobs_queue_idx
+              ON jobs(status, kind, created_at);
+            CREATE TABLE IF NOT EXISTS audit_events (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              event_type TEXT NOT NULL,
+              subject_id TEXT NOT NULL,
+              details TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL
+            );
             """
         )
+        columns = {row["name"] for row in self._connection.execute("PRAGMA table_info(jobs)")}
+        if "lease_until" not in columns:
+            self._connection.execute("ALTER TABLE jobs ADD COLUMN lease_until TEXT NOT NULL DEFAULT ''")
+            self._connection.commit()
 
     def _next_priority(self) -> int:
         row = self._connection.execute(
@@ -241,4 +400,17 @@ def _episode_from_row(row: sqlite3.Row) -> Episode:
         revision=row["revision"],
         final_video_uri=row["final_video_uri"],
         created_at=row["created_at"],
+    )
+
+
+def _job_from_row(row: sqlite3.Row) -> Job:
+    return Job(
+        id=row["id"],
+        kind=row["kind"],
+        idempotency_key=row["idempotency_key"],
+        status=row["status"],
+        attempts=row["attempts"],
+        payload=row["payload"],
+        error=row["error"],
+        lease_until=row["lease_until"],
     )

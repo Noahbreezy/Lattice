@@ -1,4 +1,4 @@
-# Lattice
+﻿# Lattice
 
 Lattice is a configurable framework for producing high-quality short-form
 videos. A project configuration describes the content strategy, consistent
@@ -26,10 +26,12 @@ directly on `main`.
 
 ## Status
 
-The current slice provides dependency-free configuration and content contracts,
-a local topic/history store, a deterministic development pipeline, and a
-SQLite persistence adapter for server-oriented episode/review state. Its
-research data is explicitly provisional and must not be published.
+The current slice provides dependency-free configuration and versioned
+Script-to-PublishedVideo artifact contracts with provenance, a local
+topic/history store, a deterministic development pipeline, deterministic
+research/script quality gates, and a SQLite persistence adapter for
+server-oriented episode/review state and retryable jobs. Its research data is
+explicitly provisional and must not be published.
 
 ## Quick start
 
@@ -116,6 +118,52 @@ repository.close()
 '@ | python -
 ```
 
+Start the local review API with a configured SQLite database:
+
+```powershell
+$env:PYTHONPATH = "src"
+$env:LATTICE_REVIEW_TOKEN = "change-this-local-token"
+@'
+from lattice import EpisodeRepository, create_review_server
+
+repository = EpisodeRepository("var/lattice.sqlite")
+server = create_review_server(repository, host="127.0.0.1", port=8765)
+print("Review API: http://127.0.0.1:8765")
+try:
+    server.serve_forever()
+finally:
+    server.server_close()
+    repository.close()
+'@ | python -
+```
+
+The API exposes `GET /health`, `GET /episodes`, `GET /episodes/{id}`, and
+`POST /episodes/{id}/review`. Set `LATTICE_REVIEW_TOKEN` before use; requests
+then require the configured bearer token in the `Authorization` header. This is a local adapter,\r\nnot a public deployment authentication system.
+
+Once installed, the same server is available as:
+
+```powershell
+$env:LATTICE_REVIEW_TOKEN = "change-this-local-token"
+lattice-review-server --database var\lattice.sqlite
+```
+
+The local FFmpeg renderer creates a real private MP4 from a successful render
+job. It currently uses generated color slates until a visual asset provider is
+configured:
+
+```powershell
+$env:PYTHONPATH = "src"
+@'
+from lattice import FfmpegRenderer
+renderer = FfmpegRenderer("var/videos")
+print("Renderer ready:", renderer.output_dir)
+'@ | python -
+```
+
+Each render also emits an `.srt` subtitle artifact derived from storyboard
+narration. A future TTS/asset adapter can use the same scene timings to add
+narration, visuals, and burned-in captions without changing the job contract.
 SQLite is used only to keep local development dependency-free. The repository
 interface is designed for a PostgreSQL implementation when the server API and
 deployment are introduced.
