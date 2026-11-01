@@ -6,6 +6,16 @@ video traits, production workflow, and optional AI tools. The framework is
 intended to support many video formats; the included knowledge channel is only
 an example configuration.
 
+## Mission
+
+Lattice exists to make it easy to create high-quality short-form videos from
+prompts. It is a configurable, provider-independent AI video creation
+framework: users should be able to define the content strategy, production
+workflow, quality requirements, and tools for any topic or theme. The current
+knowledge channel is an initial use case, not a limit on what the framework
+supports. Source-backed research, explicit uncertainty, and human review
+remain essential quality safeguards before publication.
+
 ## Branching strategy
 
 `main` is the latest integrated version and should remain deployable. New work
