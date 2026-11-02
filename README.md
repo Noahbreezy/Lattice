@@ -13,8 +13,9 @@ prompts. It is a configurable, provider-independent AI video creation
 framework: users should be able to define the content strategy, production
 workflow, quality requirements, and tools for any topic or theme. The current
 knowledge channel is an initial use case, not a limit on what the framework
-supports. Source-backed research, explicit uncertainty, and human review
-remain essential quality safeguards before publication.
+supports. AI-generated lessons are acceptable for recreational content; the
+system should label uncertainty and run automated checks before final review.
+Human review happens only after a complete video has been rendered.
 
 ## Branching strategy
 
@@ -31,7 +32,8 @@ Script-to-PublishedVideo artifact contracts with provenance, a local
 topic/history store, a deterministic development pipeline, deterministic
 research/script quality gates, and a SQLite persistence adapter for
 server-oriented episode/review state and retryable jobs. Its research data is
-explicitly provisional and must not be published.
+explicitly provisional and is intended to be replaced by an AI lesson provider
+for the recreational workflow.
 
 ## Quick start
 
@@ -90,9 +92,35 @@ python -m lattice.cli path\to\project.json
 Validation errors are explicit and fail with a non-zero exit code.
 
 The contract and infrastructure direction is documented in
-[`docs/architecture.md`](docs/architecture.md). The next provider integration
-must replace the placeholder research stage, attach real citations to claims,
-and add human review before publication.
+[`docs/architecture.md`](docs/architecture.md). The primary production
+workflow is model-generated lesson -> automated quality checks -> script ->
+scenes -> narration and visuals -> rendered video -> human review. The
+`WikipediaResearchProvider` remains an optional source-grounded mode, not a
+required step for recreational videos.
+
+An Ollama model can generate the lesson locally without an API key:
+
+```powershell
+$env:PYTHONPATH = "src"
+@'
+from pathlib import Path
+from lattice import (
+    LessonHistory, OllamaLessonProvider, build_production_bundle, load_config
+)
+
+config = load_config("configs\knowledge-channel.json")
+bundle = build_production_bundle(
+    config,
+    LessonHistory(Path("var\lesson-history.json")),
+    lesson_provider=OllamaLessonProvider("qwen3:4b"),
+)
+print(bundle.draft.script.sections[0].text)
+'@ | python -
+```
+
+The adapter requires Ollama to be running locally and returns structured
+sections, claims, and uncertainty. If no model is configured, the deterministic
+development fixture remains available for tests and offline development.
 
 The project has mirrored domain documentation under [`docs/`](docs/README.md).
 Each page follows the corresponding source, configuration, or test path so
@@ -127,7 +155,9 @@ $env:LATTICE_REVIEW_TOKEN = "change-this-local-token"
 from lattice import EpisodeRepository, create_review_server
 
 repository = EpisodeRepository("var/lattice.sqlite")
-server = create_review_server(repository, host="127.0.0.1", port=8765)
+server = create_review_server(
+    repository, host="127.0.0.1", port=8765, media_root="var/videos"
+)
 print("Review API: http://127.0.0.1:8765")
 try:
     server.serve_forever()
@@ -137,9 +167,16 @@ finally:
 '@ | python -
 ```
 
-The API exposes `GET /health`, `GET /episodes`, `GET /episodes/{id}`, and
-`POST /episodes/{id}/review`. Set `LATTICE_REVIEW_TOKEN` before use; requests
+The API exposes `GET /health`, `GET /episodes`, `GET /review-queue`,
+`GET /episodes/{id}`, `GET /episodes/{id}/reviews`, and
+`POST /episodes/{id}/review`. Review rejection payloads may include a
+`criteria` array and timestamped `markers` with `start_seconds`,
+`end_seconds`, `criterion`, and optional `comment`. Set
+`LATTICE_REVIEW_TOKEN` before use; requests
 then require the configured bearer token in the `Authorization` header. This is a local adapter,\r\nnot a public deployment authentication system.
+`GET /app` serves a minimal mobile-friendly review page for the local adapter.
+Rejected decisions increment the episode revision and persist an immutable
+revision record containing the feedback that caused the rework.
 
 Once installed, the same server is available as:
 
@@ -149,8 +186,8 @@ lattice-review-server --database var\lattice.sqlite
 ```
 
 The local FFmpeg renderer creates a real private MP4 from a successful render
-job. It currently uses generated color slates until a visual asset provider is
-configured:
+job. It creates a consistent illustrated geometric style and can use free
+local Windows SAPI narration without credentials:
 
 ```powershell
 $env:PYTHONPATH = "src"
@@ -161,9 +198,28 @@ print("Renderer ready:", renderer.output_dir)
 '@ | python -
 ```
 
+For narrated output on Windows:
+
+```powershell
+$env:PYTHONPATH = "src"
+@'
+from lattice import FfmpegRenderer, WindowsSpeechTts
+renderer = FfmpegRenderer("var/videos", tts_provider=WindowsSpeechTts())
+'@ | python -
+```
+
+Piper is also supported through `PiperTts` when a local Piper executable and
+voice model are installed. Narration returns explicit word timings; providers
+with native alignment data can replace the current proportional timing
+fallback without changing the renderer contract.
+
 Each render also emits an `.srt` subtitle artifact derived from storyboard
 narration. A future TTS/asset adapter can use the same scene timings to add
 narration, visuals, and burned-in captions without changing the job contract.
+`build_production_bundle` provides the first complete deterministic slice from
+topic selection through a duration-accurate vertical render job. The built-in
+demo research fixture covers Path dependence and Base rates for exercising the
+full workflow; it is not a replacement for a live research provider.
 SQLite is used only to keep local development dependency-free. The repository
 interface is designed for a PostgreSQL implementation when the server API and
 deployment are introduced.

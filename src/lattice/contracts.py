@@ -177,6 +177,21 @@ class StoryboardScene:
 
 
 @dataclass(frozen=True)
+class ReviewMarker:
+    """Timestamped reviewer feedback attached to a video revision."""
+
+    start_seconds: int
+    end_seconds: int
+    criterion: str
+    comment: str = ""
+
+    def __post_init__(self) -> None:
+        if self.start_seconds < 0 or self.end_seconds <= self.start_seconds:
+            raise ConfigError("review_marker timestamps must be a positive interval.")
+        _text(self.criterion, "review_marker.criterion")
+
+
+@dataclass(frozen=True)
 class Storyboard:
     scenes: tuple[StoryboardScene, ...]
     version: int = 1
@@ -335,6 +350,26 @@ class Episode:
 
 
 @dataclass(frozen=True)
+class Revision:
+    """Immutable production attempt associated with an episode."""
+
+    episode_id: str
+    revision: int
+    parent_revision: int | None = None
+    reason: str = "initial"
+    feedback: str = ""
+    created_at: str = ""
+
+    def __post_init__(self) -> None:
+        _text(self.episode_id, "revision.episode_id")
+        if self.revision < 1:
+            raise ConfigError("revision.revision must be positive.")
+        if self.parent_revision is not None and self.parent_revision >= self.revision:
+            raise ConfigError("revision.parent_revision must be older than revision.")
+        _text(self.reason, "revision.reason")
+
+
+@dataclass(frozen=True)
 class Review:
     """An immutable decision made by the authenticated owner."""
 
@@ -342,13 +377,19 @@ class Review:
     decision: ReviewDecision
     reviewer_id: str
     feedback: str = ""
+    criteria: tuple[str, ...] = ()
+    markers: tuple[ReviewMarker, ...] = ()
     created_at: str = ""
 
     def __post_init__(self) -> None:
         _text(self.episode_id, "review.episode_id")
         _text(self.reviewer_id, "review.reviewer_id")
-        if self.decision == ReviewDecision.REJECT and not self.feedback.strip():
-            raise ConfigError("review.feedback is required when rejecting a video.")
+        if self.decision == ReviewDecision.REJECT and not (
+            self.feedback.strip() or self.criteria or self.markers
+        ):
+            raise ConfigError("rejected reviews require feedback, criteria, or markers.")
+        if any(not isinstance(item, str) or not item.strip() for item in self.criteria):
+            raise ConfigError("review.criteria must contain non-empty strings.")
 
 
 def now_utc() -> str:

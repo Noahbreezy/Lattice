@@ -4,10 +4,20 @@ from __future__ import annotations
 
 import sqlite3
 import hashlib
+import json
 from pathlib import Path
 from dataclasses import dataclass
 
-from .contracts import Episode, EpisodeStatus, Review, ReviewDecision, Topic, now_utc
+from .contracts import (
+    Episode,
+    EpisodeStatus,
+    Review,
+    ReviewDecision,
+    ReviewMarker,
+    Revision,
+    Topic,
+    now_utc,
+)
 
 
 @dataclass(frozen=True)
@@ -75,6 +85,52 @@ class EpisodeRepository:
         )
         self._connection.commit()
 
+    def create_revision(
+        self,
+        episode_id: str,
+        revision: int,
+        parent_revision: int | None = None,
+        reason: str = "initial",
+        feedback: str = "",
+    ) -> Revision:
+        item = Revision(
+            episode_id, revision, parent_revision, reason, feedback, now_utc()
+        )
+        with self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO revisions
+                  (episode_id, revision, parent_revision, reason, feedback, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    item.episode_id,
+                    item.revision,
+                    item.parent_revision,
+                    item.reason,
+                    item.feedback,
+                    item.created_at,
+                ),
+            )
+        return item
+
+    def revisions_for(self, episode_id: str) -> tuple[Revision, ...]:
+        rows = self._connection.execute(
+            "SELECT * FROM revisions WHERE episode_id = ? ORDER BY revision",
+            (episode_id,),
+        ).fetchall()
+        return tuple(
+            Revision(
+                episode_id=row["episode_id"],
+                revision=row["revision"],
+                parent_revision=row["parent_revision"],
+                reason=row["reason"],
+                feedback=row["feedback"],
+                created_at=row["created_at"],
+            )
+            for row in rows
+        )
+
     def get(self, episode_id: str) -> Episode | None:
         row = self._connection.execute(
             "SELECT * FROM episodes WHERE id = ?", (episode_id,)
@@ -84,6 +140,19 @@ class EpisodeRepository:
     def list_episodes(self) -> tuple[Episode, ...]:
         rows = self._connection.execute(
             "SELECT * FROM episodes ORDER BY created_at ASC, id ASC"
+        ).fetchall()
+        return tuple(_episode_from_row(row) for row in rows)
+
+    def list_queue(self) -> tuple[Episode, ...]:
+        """Return work in processing order, with rejected revisions first."""
+
+        rows = self._connection.execute(
+            """
+            SELECT * FROM episodes
+            WHERE status IN (?, ?)
+            ORDER BY queue_priority ASC, created_at ASC, id ASC
+            """,
+            (EpisodeStatus.REJECTED.value, EpisodeStatus.QUEUED.value),
         ).fetchall()
         return tuple(_episode_from_row(row) for row in rows)
 
@@ -140,6 +209,8 @@ class EpisodeRepository:
         reviewer_id: str,
         decision: ReviewDecision,
         feedback: str = "",
+        criteria: tuple[str, ...] = (),
+        markers: tuple[ReviewMarker, ...] = (),
     ) -> tuple[Episode, Review]:
         if episode.status != EpisodeStatus.AWAITING_REVIEW:
             raise ValueError("Only episodes awaiting review can receive a decision.")
@@ -148,6 +219,8 @@ class EpisodeRepository:
             decision=decision,
             reviewer_id=reviewer_id,
             feedback=feedback,
+            criteria=criteria,
+            markers=markers,
             created_at=now_utc(),
         )
         status = (
@@ -160,7 +233,7 @@ class EpisodeRepository:
             id=episode.id,
             topic=episode.topic,
             status=status,
-            revision=episode.revision,
+            revision=episode.revision + (1 if decision == ReviewDecision.REJECT else 0),
             final_video_uri=episode.final_video_uri,
             created_at=episode.created_at or now_utc(),
         )
@@ -168,11 +241,12 @@ class EpisodeRepository:
             cursor = self._connection.execute(
                 """
                 UPDATE episodes
-                SET status = ?, queue_priority = ?, queue_feedback = ?
+                SET status = ?, revision = ?, queue_priority = ?, queue_feedback = ?
                 WHERE id = ? AND status = ?
                 """,
                 (
                     status.value,
+                    updated.revision,
                     priority,
                     feedback,
                     episode.id,
@@ -186,17 +260,56 @@ class EpisodeRepository:
             self._connection.execute(
                 """
                 INSERT INTO reviews
-                  (episode_id, decision, reviewer_id, feedback, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                  (episode_id, decision, reviewer_id, feedback, criteria, markers, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     review.episode_id,
                     review.decision.value,
                     review.reviewer_id,
                     review.feedback,
+                    json.dumps(review.criteria),
+                    json.dumps([
+                        {
+                            "start_seconds": marker.start_seconds,
+                            "end_seconds": marker.end_seconds,
+                            "criterion": marker.criterion,
+                            "comment": marker.comment,
+                        }
+                        for marker in review.markers
+                    ]),
                     review.created_at,
                 ),
             )
+            if decision == ReviewDecision.REJECT:
+                self._connection.execute(
+                    """
+                    INSERT INTO revisions
+                      (episode_id, revision, parent_revision, reason, feedback, created_at)
+                    VALUES (?, ?, ?, 'review-feedback', ?, ?)
+                    """,
+                    (
+                        episode.id,
+                        episode.revision + 1,
+                        episode.revision,
+                        json.dumps(
+                            {
+                                "feedback": feedback,
+                                "criteria": criteria,
+                                "markers": [
+                                    {
+                                        "start_seconds": marker.start_seconds,
+                                        "end_seconds": marker.end_seconds,
+                                        "criterion": marker.criterion,
+                                        "comment": marker.comment,
+                                    }
+                                    for marker in markers
+                                ],
+                            }
+                        ),
+                        now_utc(),
+                    ),
+                )
         return updated, review
 
     def reviews_for(self, episode_id: str) -> tuple[Review, ...]:
@@ -209,6 +322,11 @@ class EpisodeRepository:
                 decision=ReviewDecision(row["decision"]),
                 reviewer_id=row["reviewer_id"],
                 feedback=row["feedback"],
+                criteria=tuple(json.loads(row["criteria"] or "[]")),
+                markers=tuple(
+                    ReviewMarker(**marker)
+                    for marker in json.loads(row["markers"] or "[]")
+                ),
                 created_at=row["created_at"],
             )
             for row in rows
@@ -349,7 +467,18 @@ class EpisodeRepository:
               decision TEXT NOT NULL,
               reviewer_id TEXT NOT NULL,
               feedback TEXT NOT NULL DEFAULT '',
+              criteria TEXT NOT NULL DEFAULT '[]',
+              markers TEXT NOT NULL DEFAULT '[]',
               created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS revisions (
+              episode_id TEXT NOT NULL REFERENCES episodes(id),
+              revision INTEGER NOT NULL CHECK (revision > 0),
+              parent_revision INTEGER,
+              reason TEXT NOT NULL,
+              feedback TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL,
+              PRIMARY KEY (episode_id, revision)
             );
             CREATE TABLE IF NOT EXISTS jobs (
               id TEXT PRIMARY KEY,
@@ -374,6 +503,17 @@ class EpisodeRepository:
             """
         )
         columns = {row["name"] for row in self._connection.execute("PRAGMA table_info(jobs)")}
+        review_columns = {
+            row["name"] for row in self._connection.execute("PRAGMA table_info(reviews)")
+        }
+        if "criteria" not in review_columns:
+            self._connection.execute(
+                "ALTER TABLE reviews ADD COLUMN criteria TEXT NOT NULL DEFAULT '[]'"
+            )
+        if "markers" not in review_columns:
+            self._connection.execute(
+                "ALTER TABLE reviews ADD COLUMN markers TEXT NOT NULL DEFAULT '[]'"
+            )
         if "lease_until" not in columns:
             self._connection.execute("ALTER TABLE jobs ADD COLUMN lease_until TEXT NOT NULL DEFAULT ''")
             self._connection.commit()

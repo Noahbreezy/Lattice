@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .contracts import Episode, EpisodeStatus, Review, ReviewDecision, now_utc
+from .contracts import Episode, EpisodeStatus, Review, ReviewDecision, ReviewMarker, now_utc
 
 
 @dataclass(frozen=True)
@@ -52,7 +52,13 @@ class ReviewQueue:
         return updated
 
     def decide(
-        self, episode: Episode, reviewer_id: str, decision: ReviewDecision, feedback: str = ""
+        self,
+        episode: Episode,
+        reviewer_id: str,
+        decision: ReviewDecision,
+        feedback: str = "",
+        criteria: tuple[str, ...] = (),
+        markers: tuple[ReviewMarker, ...] = (),
     ) -> tuple[Episode, Review]:
         if episode.status != EpisodeStatus.AWAITING_REVIEW:
             raise ValueError("Only episodes awaiting review can receive a decision.")
@@ -61,6 +67,8 @@ class ReviewQueue:
             decision=decision,
             reviewer_id=reviewer_id,
             feedback=feedback,
+            criteria=criteria,
+            markers=markers,
             created_at=now_utc(),
         )
         next_status = (
@@ -72,7 +80,7 @@ class ReviewQueue:
             id=episode.id,
             topic=episode.topic,
             status=next_status,
-            revision=episode.revision,
+            revision=episode.revision + (1 if decision == ReviewDecision.REJECT else 0),
             final_video_uri=episode.final_video_uri,
             created_at=episode.created_at or now_utc(),
         )

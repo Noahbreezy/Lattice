@@ -13,6 +13,7 @@ from lattice.pipeline import (
 )
 from lattice.renderer import FfmpegRenderer
 from lattice.contracts import RenderJobStatus, Topic
+from lattice.media_quality import check_media
 
 
 @unittest.skipUnless(shutil.which("ffmpeg"), "FFmpeg is required for local renderer tests.")
@@ -31,3 +32,5 @@ class RendererTests(unittest.TestCase):
             self.assertTrue(Path(video.uri).exists())
             self.assertGreater(Path(video.uri).stat().st_size, 0)
             self.assertEqual(len(tuple(Path(directory).glob("*.srt"))), 1)
+            report = check_media(video.uri, expected_duration=config.video_length_seconds)
+            self.assertTrue(report.passed, report.issues)

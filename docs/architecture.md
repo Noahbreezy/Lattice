@@ -5,17 +5,25 @@ For module-level behavior, see the mirrored documentation index in
 
 Lattice is organized around a provider-independent content pipeline. A
 configuration defines the behavior of a project; each production stage emits a
-versioned artifact that can be inspected, approved, retried, or replaced.
+versioned artifact that can be inspected, automatically checked, retried, or
+replaced. For the recreational single-owner deployment, agents and workers
+run autonomously until a complete video is available for human review.
 
 ## Pipeline contracts
 
-The current local pipeline is:
+The target local pipeline is:
 
 ```text
 ProjectConfig
   -> Topic
-  -> ResearchPacket
+  -> AILesson
+  -> AutomatedQualityGate
   -> Script
+  -> Storyboard
+  -> Narration + VisualAssets
+  -> RenderedVideo
+  -> AutomatedMediaChecks
+  -> HumanReview
 ```
 
 The contracts live in [`src/lattice/contracts.py`](../src/lattice/contracts.py).
@@ -39,9 +47,36 @@ hash, prompt version, provider/model identifier, input artifact IDs, content
 hash, UTC timestamps, and approval state where applicable. Render jobs only
 advance through valid states, and a video artifact can only be created from a
 succeeded job. Provider implementations remain behind capability interfaces.
-Research providers implement `ResearchProvider`, while `quality.py` provides a
-deterministic gate for source evidence, script structure, duration, and claim
-coverage before media production.
+
+The first vertical slice is exposed by `build_production_bundle`: it selects a
+topic, creates research and a script, allocates storyboard scenes to exactly
+the configured target duration, creates deterministic asset references, and
+returns a queued render job. The local renderer produces a real 9:16 MP4 and
+SRT artifact. Demo research is source-linked for Path dependence and Base
+rates, but is intentionally a fixture until a live research provider is
+configured.
+
+The local renderer supports a zero-cost Windows SAPI TTS adapter and an
+optional Piper adapter. It produces word timing metadata, illustrated
+geometric scene slates, captions, and a padded audio track that preserves the
+requested final duration. `media_quality.py` validates the MP4 container,
+audio/video stream presence, vertical dimensions, and duration.
+`IllustratedVisualProvider` emits reusable SVG scene assets, while
+`regenerate_scenes` creates a new storyboard version only for selected scenes.
+Lesson providers implement an AI lesson capability and may optionally use a
+source provider for fact-checking. `quality.py` provides automated gates for
+lesson structure, uncertainty labeling, script duration, scene timing, and
+claim coverage before media production. The system should block only failed
+automated checks or provider errors; it should not pause for a human lesson
+approval.
+`OllamaLessonProvider` implements this capability through Ollama's local JSON
+generation endpoint. It converts the model response into a structured
+`AILesson`, then into the existing research and script contracts. No Ollama
+model is required for importing or testing the package; callers opt in by
+passing the provider to `build_production_bundle`.
+The standard-library `WikipediaResearchProvider` is a free initial
+source-backed adapter. Its output remains conservative and should be
+cross-checked for sensitive or high-impact topics.
 
 ## Server-hosted review workflow
 
@@ -57,10 +92,14 @@ generated -> awaiting_review -> approved -> ready_for_upload
 ```
 
 Rejections require feedback. The feedback is stored with an immutable review
-record and is supplied to the next processing revision. Rejected work is
+record and is supplied to the next processing revision. Feedback may contain
+criteria and timestamped markers so a mobile client can target specific scenes
+or time ranges. Rejected work is
 inserted ahead of untouched queued work, while the original video artifact and
 revision remain auditable. Approved videos remain in private storage with a
 stable artifact reference until the owner uploads them.
+The local API also serves a minimal review page at `/app`; it is intentionally
+not a production authentication or media-serving implementation.
 
 The domain rules are represented by [`src/lattice/review.py`](../src/lattice/review.py)
 and the lifecycle contracts in
@@ -94,10 +133,10 @@ without replacing authentication.
 
 The dependency-free pipeline in
 [`src/lattice/pipeline.py`](../src/lattice/pipeline.py) is a development
-implementation, not a research system. Its research packet uses a clearly
-marked placeholder source and an `unverified` claim. No generated output from
-this path should be published without replacing the research stage with a real
-provider and human review.
+implementation. Its provisional packet is useful for deterministic tests, but
+the recreational production path should replace it with an AI lesson provider.
+Human review belongs after rendering, not between lesson generation and media
+production.
 
 Lesson history is stored in a small JSON file through
 [`src/lattice/history.py`](../src/lattice/history.py). Topic keys are normalized

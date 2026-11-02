@@ -40,5 +40,6 @@ and the local media path is documented in
 [`src/lattice/renderer.md`](src/lattice/renderer.md).
 The local job runner is documented in [`src/lattice/worker.md`](src/lattice/worker.md).
 
-The local research packet is provisional. It must not be published without a
-real research provider, source verification, and human review.
+The local research packet is provisional. Recreational production may use an
+AI-generated lesson directly, with automated checks before rendering and human
+review only after a complete video is available.

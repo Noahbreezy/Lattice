@@ -7,11 +7,16 @@ from lattice.config import load_config
 from lattice.contracts import Claim, ResearchPacket, Source, Topic
 from lattice.history import LessonHistory
 from lattice.pipeline import (
+    build_demo_research_packet,
+    build_production_bundle,
     build_research_packet,
     build_script,
     create_episode_draft,
     record_completed_episode,
+    regenerate_scenes,
 )
+from lattice.research import AILesson, AILessonProvider
+from lattice.contracts import ScriptSection
 
 
 class PipelineTests(unittest.TestCase):
@@ -75,3 +80,57 @@ class PipelineTests(unittest.TestCase):
             script.estimated_duration_seconds,
             max(1, round(sum(len(section.text.split()) for section in script.sections))),
         )
+
+    def test_production_bundle_allocates_exact_target_duration(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            history = LessonHistory(Path(directory) / "history.json")
+            bundle = build_production_bundle(self.config, history)
+            self.assertEqual(
+                sum(scene.duration_seconds for scene in bundle.storyboard.scenes),
+                self.config.video_length_seconds,
+            )
+
+    def test_demo_research_has_real_source_links(self) -> None:
+        packet = build_demo_research_packet(Topic("Path dependence", "systems"))
+        self.assertTrue(all(source.url.startswith("https://") for source in packet.sources))
+        self.assertTrue(all(claim.evidence_level == "supported" for claim in packet.claims))
+
+    def test_scene_regeneration_preserves_unaffected_scene(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            history = LessonHistory(Path(directory) / "history.json")
+            bundle = build_production_bundle(self.config, history)
+            revised = regenerate_scenes(
+                bundle.storyboard, {"scene-2"}, "Use a concrete railway example."
+            )
+            self.assertEqual(revised.version, bundle.storyboard.version + 1)
+            self.assertEqual(
+                revised.scenes[0].visual_direction,
+                bundle.storyboard.scenes[0].visual_direction,
+            )
+            self.assertIn("railway", revised.scenes[1].visual_direction)
+
+    def test_ai_lesson_provider_drives_script_sections(self) -> None:
+        class FakeLessonProvider:
+            def generate_lesson(self, topic, config):
+                return AILesson(
+                    topic=topic,
+                    summary="A model-authored lesson.",
+                    sections=tuple(
+                        ScriptSection(heading, f"Model explanation of {heading}.")
+                        for heading in config.required_sections
+                    ),
+                    claims=(
+                        Claim("The concept has an important mechanism.", "model-generated", ()),
+                    ),
+                    uncertainty="This is recreational model-generated content.",
+                    provider_model="test/fake",
+                )
+
+        with tempfile.TemporaryDirectory() as directory:
+            bundle = build_production_bundle(
+                self.config,
+                LessonHistory(Path(directory) / "history.json"),
+                lesson_provider=FakeLessonProvider(),
+            )
+            self.assertEqual(bundle.draft.script.sections[0].text, "Model explanation of The idea.")
+            self.assertEqual(bundle.draft.research.sources[0].source_type, "ai-generated")

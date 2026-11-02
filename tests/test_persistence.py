@@ -61,6 +61,23 @@ class EpisodeRepositoryTests(unittest.TestCase):
         self.assertEqual(self.repository.claim_next().id, "episode-1")
         self.assertEqual(self.repository.reviews_for("episode-1"), (review,))
 
+    def test_rejection_creates_next_revision_with_feedback(self) -> None:
+        episode = Episode("episode-1", self.topic, EpisodeStatus.PROCESSING, 1)
+        self.repository.save(episode)
+        awaiting = self.repository.submit_for_review(episode, "private://final.mp4")
+        updated, review = self.repository.decide(
+            awaiting,
+            "owner",
+            ReviewDecision.REJECT,
+            criteria=("pacing",),
+            feedback="Slow down the explanation.",
+        )
+        self.assertEqual(updated.revision, 2)
+        revisions = self.repository.revisions_for("episode-1")
+        self.assertEqual(revisions[0].parent_revision, 1)
+        self.assertIn("pacing", revisions[0].feedback)
+        self.assertEqual(self.repository.reviews_for("episode-1"), (review,))
+
     def test_approval_keeps_private_video_reference(self) -> None:
         episode = Episode("episode-1", self.topic, EpisodeStatus.PROCESSING, 1)
         self.repository.save(episode)

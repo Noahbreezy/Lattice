@@ -1,6 +1,6 @@
 import unittest
 
-from lattice.contracts import Episode, EpisodeStatus, ReviewDecision, Topic
+from lattice.contracts import Episode, EpisodeStatus, ReviewDecision, ReviewMarker, Topic
 from lattice.review import ReviewQueue
 
 
@@ -40,3 +40,15 @@ class ReviewQueueTests(unittest.TestCase):
         episode = Episode("queued", self.topic, EpisodeStatus.QUEUED, 1)
         with self.assertRaisesRegex(ValueError, "awaiting review"):
             self.queue.decide(episode, "owner", ReviewDecision.APPROVE)
+
+    def test_rejection_can_be_structured_with_timestamped_feedback(self) -> None:
+        episode = Episode("marked", self.topic, EpisodeStatus.AWAITING_REVIEW, 1, "s3://x")
+        _, review = self.queue.decide(
+            episode,
+            "owner",
+            ReviewDecision.REJECT,
+            criteria=("visual_clarity",),
+            markers=(ReviewMarker(5, 12, "visual_clarity", "Show the railway tracks."),),
+        )
+        self.assertEqual(review.criteria, ("visual_clarity",))
+        self.assertEqual(review.markers[0].start_seconds, 5)

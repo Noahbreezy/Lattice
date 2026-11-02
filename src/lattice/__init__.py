@@ -15,6 +15,8 @@ from .contracts import (
     RenderJobStatus,
     Review,
     ReviewDecision,
+    ReviewMarker,
+    Revision,
     Script,
     ScriptSection,
     Source,
@@ -25,20 +27,37 @@ from .contracts import (
 from .history import LessonHistory
 from .pipeline import (
     EpisodeDraft,
+    ProductionBundle,
     build_asset_manifest,
+    build_demo_research_packet,
+    build_script_from_lesson,
+    regenerate_scenes,
     build_storyboard,
     create_episode_draft,
     create_render_job,
     publish_video,
+    build_production_bundle,
 )
 from .persistence import EpisodeRepository, Job
 from .renderer import FfmpegRenderer
+from .tts import Narration, PiperTts, TtsProvider, WindowsSpeechTts, WordTiming
+from .media_quality import MediaIssue, MediaReport, check_media
 from .local_api import create_review_server
 from .storage import LocalObjectStorage, StoredObject
 from .publication import LocalPublisher, Publication, Publisher
 from .worker import LocalWorker
 from .quality import QualityIssue, QualityReport, check_script, require_script_quality
-from .research import ResearchIssue, ResearchProvider, require_verified_research, validate_research
+from .research import (
+    ResearchIssue,
+    AILesson,
+    AILessonProvider,
+    OllamaLessonProvider,
+    ResearchProvider,
+    WikipediaResearchProvider,
+    require_verified_research,
+    validate_research,
+)
+from .visuals import IllustratedVisualProvider, VisualProvider
 from .review import QueueItem, ReviewQueue
 from .retention import RetentionAction, StorageLocation, StoredVideo, plan_retention
 
@@ -50,11 +69,20 @@ __all__ = [
     "Claim",
     "ConfigError",
     "EpisodeDraft",
+    "ProductionBundle",
     "Episode",
     "EpisodeStatus",
     "EpisodeRepository",
     "Job",
     "FfmpegRenderer",
+    "Narration",
+    "PiperTts",
+    "TtsProvider",
+    "WindowsSpeechTts",
+    "WordTiming",
+    "MediaIssue",
+    "MediaReport",
+    "check_media",
     "create_review_server",
     "LocalObjectStorage",
     "StoredObject",
@@ -65,7 +93,13 @@ __all__ = [
     "QualityIssue",
     "QualityReport",
     "ResearchIssue",
+    "AILesson",
+    "AILessonProvider",
+    "OllamaLessonProvider",
     "ResearchProvider",
+    "WikipediaResearchProvider",
+    "IllustratedVisualProvider",
+    "VisualProvider",
     "LessonHistory",
     "ProjectConfig",
     "RetentionAction",
@@ -76,6 +110,8 @@ __all__ = [
     "RenderJobStatus",
     "Review",
     "ReviewDecision",
+    "ReviewMarker",
+    "Revision",
     "ReviewQueue",
     "QueueItem",
     "Script",
@@ -87,6 +123,9 @@ __all__ = [
     "StoredVideo",
     "Topic",
     "build_asset_manifest",
+    "build_demo_research_packet",
+    "build_script_from_lesson",
+    "regenerate_scenes",
     "build_storyboard",
     "create_episode_draft",
     "create_render_job",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Callable
 from typing import Protocol
 
 from .config import ProjectConfig
@@ -25,6 +26,8 @@ from .contracts import (
     now_utc,
 )
 from .history import LessonHistory
+from .research import AILesson, AILessonProvider
+from .visuals import IllustratedVisualProvider, VisualProvider
 
 
 @dataclass(frozen=True)
@@ -32,6 +35,16 @@ class EpisodeDraft:
     topic: Topic
     research: ResearchPacket
     script: Script
+
+
+@dataclass(frozen=True)
+class ProductionBundle:
+    """All deterministic artifacts needed to render one reviewable episode."""
+
+    draft: EpisodeDraft
+    storyboard: Storyboard
+    asset_manifest: AssetManifest
+    render_job: RenderJob
 
 
 class RenderProvider(Protocol):
@@ -76,6 +89,92 @@ def build_research_packet(topic: Topic) -> ResearchPacket:
     )
 
 
+def build_demo_research_packet(topic: Topic) -> ResearchPacket:
+    """Return source-linked teaching material for the two initial demo topics.
+
+    This is deliberately a small fixture for validating the complete product
+    loop. It is not a substitute for a live research provider.
+    """
+
+    key = topic.key
+    if "path dependence" in key:
+        sources = (
+            Source(
+                "Path dependence",
+                "Stanford Encyclopedia of Philosophy, entry on path dependence.",
+                "https://plato.stanford.edu/entries/path-dependence/",
+                "reference",
+            ),
+            Source(
+                "Increasing returns and the path dependence of progress",
+                "Arthur, W. Brian (1994), University of Michigan Press.",
+                "https://press.umich.edu/Books/A/Increasing-Returns-and-Path-Dependence",
+                "book",
+            ),
+        )
+        claims = (
+            Claim(
+                "Early choices can influence which options remain practical later.",
+                "supported",
+                (0, 1),
+                "The strength of lock-in varies by technology and institution.",
+            ),
+            Claim(
+                "Network effects, learning, and switching costs can reinforce an established choice.",
+                "supported",
+                (1,),
+            ),
+        )
+        summary = (
+            "Path dependence means that history can constrain present choices. "
+            "An early advantage may grow through learning, complementary infrastructure, "
+            "network effects, and switching costs, so the outcome is shaped by sequence "
+            "as well as by the isolated quality of each option."
+        )
+    elif "base rate" in key:
+        sources = (
+            Source(
+                "Base rate fallacy",
+                "NIST/SEMATECH e-Handbook of Statistical Methods, Bayes theorem.",
+                "https://www.itl.nist.gov/div898/handbook/",
+                "reference",
+            ),
+            Source(
+                "Understanding diagnostic test results",
+                "National Cancer Institute, cancer screening and false positives.",
+                "https://www.cancer.gov/about-cancer/screening/understanding-screening-tests",
+                "public-health",
+            ),
+        )
+        claims = (
+            Claim(
+                "The meaning of evidence depends on how common the underlying event was beforehand.",
+                "supported",
+                (0, 1),
+            ),
+            Claim(
+                "A highly accurate test can still produce many false positives when the target is rare.",
+                "supported",
+                (1,),
+                "Exact predictive values depend on prevalence and test characteristics.",
+            ),
+        )
+        summary = (
+            "A base rate is the background frequency of an event before new evidence "
+            "arrives. Bayes' rule combines that starting probability with the reliability "
+            "of the evidence, which is why rare-event detectors can generate many false alarms."
+        )
+    else:
+        return build_research_packet(topic)
+    return ResearchPacket(
+        topic=topic,
+        summary=summary,
+        sources=sources,
+        claims=claims,
+        created_at=now_utc(),
+    )
+
+
 def build_script(
     config: ProjectConfig, research: ResearchPacket, words_per_minute: int = 150
 ) -> Script:
@@ -111,16 +210,43 @@ def build_script(
     )
 
 
+def build_script_from_lesson(
+    config: ProjectConfig, lesson: AILesson, words_per_minute: int = 150
+) -> Script:
+    """Convert model-authored lesson sections into the production script."""
+
+    if tuple(section.heading for section in lesson.sections) != tuple(config.required_sections):
+        raise ValueError("AI lesson headings do not match the configured structure.")
+    word_count = sum(len(section.text.split()) for section in lesson.sections)
+    estimated_duration = max(1, round(word_count / words_per_minute * 60))
+    return Script(
+        topic=lesson.topic,
+        sections=lesson.sections,
+        estimated_duration_seconds=estimated_duration,
+        source_claim_count=len(lesson.claims),
+        provenance=ArtifactProvenance.for_content(
+            f"script:{lesson.topic.key}:ai-v1",
+            {"sections": lesson.sections, "summary": lesson.summary},
+            config_version=config.config_version,
+            config_hash=config.config_hash,
+            prompt_version=config.prompt_version,
+            provider_model=lesson.provider_model,
+        ),
+    )
+
+
 def build_storyboard(config: ProjectConfig, script: Script) -> Storyboard:
     """Create the deterministic local storyboard adapter for a script."""
 
+    total_duration = config.video_length_seconds
+    base, remainder = divmod(total_duration, len(script.sections))
     scenes = tuple(
         StoryboardScene(
             scene_id=f"scene-{index}",
             script_section_heading=section.heading,
             narration=section.text,
-            visual_direction=f"Visualize the central idea of: {section.heading}.",
-            duration_seconds=max(1, round(script.estimated_duration_seconds / len(script.sections))),
+            visual_direction=_visual_direction(section.heading, script.topic),
+            duration_seconds=base + (1 if index <= remainder else 0),
         )
         for index, section in enumerate(script.sections, start=1)
     )
@@ -137,17 +263,35 @@ def build_storyboard(config: ProjectConfig, script: Script) -> Storyboard:
     return Storyboard(scenes=scenes, provenance=provenance)
 
 
-def build_asset_manifest(storyboard: Storyboard) -> AssetManifest:
+def _visual_direction(heading: str, topic: Topic) -> str:
+    """Create a stable visual brief that can later be sent to a media provider."""
+
+    return (
+        f"Vertical educational explainer visual for '{topic.title}': "
+        f"show the concrete idea from the section '{heading}', with restrained "
+        "motion, readable labels, and consistent navy/amber editorial styling."
+    )
+
+
+def build_asset_manifest(
+    storyboard: Storyboard,
+    output_dir: str | None = None,
+    visual_provider: VisualProvider | None = None,
+) -> AssetManifest:
     """Create deterministic asset placeholders without selecting a vendor."""
 
-    assets = tuple(
-        AssetReference(
-            asset_id=f"{scene.scene_id}-visual",
-            asset_type="visual-placeholder",
-            uri=f"local://assets/{scene.scene_id}",
+    if output_dir is not None:
+        provider = visual_provider or IllustratedVisualProvider()
+        assets = tuple(provider.create(scene, output_dir) for scene in storyboard.scenes)
+    else:
+        assets = tuple(
+            AssetReference(
+                asset_id=f"{scene.scene_id}-visual",
+                asset_type="visual-placeholder",
+                uri=f"local://assets/{scene.scene_id}",
+            )
+            for scene in storyboard.scenes
         )
-        for scene in storyboard.scenes
-    )
     storyboard_id = storyboard.provenance.artifact_id if storyboard.provenance else ""
     inherited = storyboard.provenance
     provenance = ArtifactProvenance.for_content(
@@ -220,6 +364,64 @@ def create_episode_draft(config: ProjectConfig, history: LessonHistory) -> Episo
     research = build_research_packet(topic)
     script = build_script(config, research)
     return EpisodeDraft(topic=topic, research=research, script=script)
+
+
+def build_production_bundle(
+    config: ProjectConfig,
+    history: LessonHistory,
+    research_provider: Callable[[Topic], ResearchPacket] | None = None,
+    lesson_provider: AILessonProvider | None = None,
+) -> ProductionBundle:
+    """Build a complete provider-neutral render bundle for one episode."""
+
+    topic = select_topic(config, history)
+    if lesson_provider is not None:
+        lesson = lesson_provider.generate_lesson(topic, config)
+        research = lesson.to_research_packet()
+        script = build_script_from_lesson(config, lesson)
+    else:
+        research = (
+            research_provider(topic)
+            if research_provider is not None
+            else build_demo_research_packet(topic)
+        )
+        script = build_script(config, research)
+    draft = EpisodeDraft(topic=topic, research=research, script=script)
+    storyboard = build_storyboard(config, draft.script)
+    assets = build_asset_manifest(storyboard)
+    return ProductionBundle(
+        draft=draft,
+        storyboard=storyboard,
+        asset_manifest=assets,
+        render_job=create_render_job(storyboard, assets),
+    )
+
+
+def regenerate_scenes(
+    storyboard: Storyboard,
+    scene_ids: set[str],
+    feedback: str,
+) -> Storyboard:
+    """Create a new storyboard revision while preserving unaffected scenes."""
+
+    if not feedback.strip():
+        raise ValueError("Scene regeneration feedback is required.")
+    scenes = tuple(
+        StoryboardScene(
+            scene_id=scene.scene_id,
+            script_section_heading=scene.script_section_heading,
+            narration=scene.narration,
+            visual_direction=(
+                scene.visual_direction
+                + f" Revise this scene using reviewer feedback: {feedback.strip()}"
+                if scene.scene_id in scene_ids
+                else scene.visual_direction
+            ),
+            duration_seconds=scene.duration_seconds,
+        )
+        for scene in storyboard.scenes
+    )
+    return Storyboard(scenes=scenes, version=storyboard.version + 1)
 
 
 def record_completed_episode(draft: EpisodeDraft, history: LessonHistory) -> None:
