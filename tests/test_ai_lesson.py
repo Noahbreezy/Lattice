@@ -4,7 +4,7 @@ from pathlib import Path
 
 from lattice.config import load_config
 from lattice.contracts import Topic
-from lattice.research import OllamaLessonProvider
+from lattice.research import OllamaLessonProvider, create_configured_lesson_provider
 
 
 class _Response:
@@ -66,3 +66,14 @@ class AiLessonTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(RuntimeError, "section headings"):
             provider.generate_lesson(Topic("Topic", "systems"), config)
+
+    def test_configured_provider_uses_script_model_settings(self):
+        config = load_config(
+            Path(__file__).parents[1] / "configs" / "knowledge-channel.json"
+        )
+        provider = create_configured_lesson_provider(config)
+        self.assertIsInstance(provider, OllamaLessonProvider)
+        self.assertEqual(provider.model, "qwen3:4b")
+        self.assertEqual(
+            provider.endpoint, "http://127.0.0.1:11434/api/generate"
+        )

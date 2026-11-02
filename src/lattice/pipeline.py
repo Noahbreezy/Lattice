@@ -26,7 +26,11 @@ from .contracts import (
     now_utc,
 )
 from .history import LessonHistory
-from .research import AILesson, AILessonProvider
+from .research import (
+    AILesson,
+    AILessonProvider,
+    create_configured_lesson_provider,
+)
 from .visuals import IllustratedVisualProvider, VisualProvider
 
 
@@ -371,12 +375,23 @@ def build_production_bundle(
     history: LessonHistory,
     research_provider: Callable[[Topic], ResearchPacket] | None = None,
     lesson_provider: AILessonProvider | None = None,
+    offline: bool = False,
 ) -> ProductionBundle:
-    """Build a complete provider-neutral render bundle for one episode."""
+    """Build a complete provider-neutral render bundle for one episode.
+
+    Offline mode is reserved for deterministic fixtures and tests. Production
+    execution uses the configured lesson provider unless one is injected.
+    """
 
     topic = select_topic(config, history)
     if lesson_provider is not None:
-        lesson = lesson_provider.generate_lesson(topic, config)
+        configured_provider = lesson_provider
+    elif offline:
+        configured_provider = None
+    else:
+        configured_provider = create_configured_lesson_provider(config)
+    if configured_provider is not None:
+        lesson = configured_provider.generate_lesson(topic, config)
         research = lesson.to_research_packet()
         script = build_script_from_lesson(config, lesson)
     else:
