@@ -105,22 +105,23 @@ $env:PYTHONPATH = "src"
 @'
 from pathlib import Path
 from lattice import (
-    LessonHistory, OllamaLessonProvider, build_production_bundle, load_config
+    LessonHistory, build_production_bundle, load_config
 )
 
 config = load_config("configs\knowledge-channel.json")
 bundle = build_production_bundle(
     config,
     LessonHistory(Path("var\lesson-history.json")),
-    lesson_provider=OllamaLessonProvider("qwen3:4b"),
 )
 print(bundle.draft.script.sections[0].text)
 '@ | python -
 ```
 
-The adapter requires Ollama to be running locally and returns structured
-sections, claims, and uncertainty. If no model is configured, the deterministic
-development fixture remains available for tests and offline development.
+The configured production path requires Ollama to be running locally and
+returns structured sections, claims, and uncertainty. The model and endpoint
+are set under the `script model` entry in `production.ai_tools`. Deterministic
+research is available only when callers explicitly pass `offline=True`, which
+is intended for tests and offline development.
 
 The project has mirrored domain documentation under [`docs/`](docs/README.md).
 Each page follows the corresponding source, configuration, or test path so

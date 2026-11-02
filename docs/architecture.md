@@ -71,9 +71,10 @@ automated checks or provider errors; it should not pause for a human lesson
 approval.
 `OllamaLessonProvider` implements this capability through Ollama's local JSON
 generation endpoint. It converts the model response into a structured
-`AILesson`, then into the existing research and script contracts. No Ollama
-model is required for importing or testing the package; callers opt in by
-passing the provider to `build_production_bundle`.
+`AILesson`, then into the existing research and script contracts.
+`build_production_bundle` selects this configured provider by default.
+Deterministic demo research is reserved for explicit `offline=True` calls in
+tests and offline development.
 The standard-library `WikipediaResearchProvider` is a free initial
 source-backed adapter. Its output remains conservative and should be
 cross-checked for sensitive or high-impact topics.

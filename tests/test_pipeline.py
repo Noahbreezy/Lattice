@@ -84,7 +84,7 @@ class PipelineTests(unittest.TestCase):
     def test_production_bundle_allocates_exact_target_duration(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             history = LessonHistory(Path(directory) / "history.json")
-            bundle = build_production_bundle(self.config, history)
+            bundle = build_production_bundle(self.config, history, offline=True)
             self.assertEqual(
                 sum(scene.duration_seconds for scene in bundle.storyboard.scenes),
                 self.config.video_length_seconds,
@@ -98,7 +98,7 @@ class PipelineTests(unittest.TestCase):
     def test_scene_regeneration_preserves_unaffected_scene(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             history = LessonHistory(Path(directory) / "history.json")
-            bundle = build_production_bundle(self.config, history)
+            bundle = build_production_bundle(self.config, history, offline=True)
             revised = regenerate_scenes(
                 bundle.storyboard, {"scene-2"}, "Use a concrete railway example."
             )

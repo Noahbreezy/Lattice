@@ -81,7 +81,9 @@
       {
         "name": "script model",
         "purpose": "Turn approved research into the configured lesson structure.",
-        "provider": null,
+        "provider": "ollama",
+        "model": "qwen3:4b",
+        "endpoint": "http://127.0.0.1:11434/api/generate",
         "required": true
       },
       {

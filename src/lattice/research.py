@@ -136,6 +136,27 @@ class OllamaLessonProvider:
         return lesson
 
 
+def create_configured_lesson_provider(config: "ProjectConfig") -> AILessonProvider:
+    """Create the configured lesson provider for production execution."""
+
+    tool = next(
+        (
+            tool
+            for tool in config.ai_tools
+            if str(tool.get("name", "")).strip().lower() == "script model"
+        ),
+        {},
+    )
+    provider = str(tool.get("provider") or "ollama").strip().lower()
+    if provider != "ollama":
+        raise ValueError(f"Unsupported lesson provider: {provider}")
+    model = str(tool.get("model") or "qwen3:4b").strip()
+    endpoint = str(
+        tool.get("endpoint") or "http://127.0.0.1:11434/api/generate"
+    ).strip()
+    return OllamaLessonProvider(model=model, endpoint=endpoint)
+
+
 def _lesson_prompt(topic: Topic, config: "ProjectConfig") -> str:
     sections = "\n".join(f"- {heading}" for heading in config.required_sections)
     rules = "\n".join(f"- {rule}" for rule in config.learning_rules)
