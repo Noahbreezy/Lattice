@@ -46,7 +46,14 @@ from .local_api import create_review_server
 from .storage import LocalObjectStorage, StoredObject
 from .publication import LocalPublisher, Publication, Publisher
 from .worker import LocalWorker
-from .quality import QualityIssue, QualityReport, check_script, require_script_quality
+from .quality import (
+    QualityIssue,
+    QualityReport,
+    check_lesson,
+    check_script,
+    require_lesson_quality,
+    require_script_quality,
+)
 from .research import (
     ResearchIssue,
     AILesson,
@@ -84,6 +91,7 @@ __all__ = [
     "MediaIssue",
     "MediaReport",
     "check_media",
+    "check_lesson",
     "create_review_server",
     "LocalObjectStorage",
     "StoredObject",
@@ -134,6 +142,7 @@ __all__ = [
     "load_config",
     "plan_retention",
     "check_script",
+    "require_lesson_quality",
     "require_script_quality",
     "require_verified_research",
     "validate_research",

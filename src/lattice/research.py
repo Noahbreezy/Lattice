@@ -133,6 +133,12 @@ class OllamaLessonProvider:
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise RuntimeError(f"Ollama returned an invalid lesson shape: {exc}") from exc
+        from .quality import require_lesson_quality
+
+        try:
+            require_lesson_quality(config, lesson)
+        except ValueError as exc:
+            raise RuntimeError(f"Ollama returned a lesson that failed quality checks: {exc}") from exc
         return lesson
 
 

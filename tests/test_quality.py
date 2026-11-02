@@ -2,9 +2,10 @@ import unittest
 from pathlib import Path
 
 from lattice.config import load_config
+from lattice.contracts import Claim, ScriptSection, Topic
 from lattice.pipeline import build_research_packet, build_script
-from lattice.quality import check_script
-from lattice.contracts import Topic
+from lattice.quality import check_lesson, check_script
+from lattice.research import AILesson
 
 
 class QualityTests(unittest.TestCase):
@@ -48,3 +49,23 @@ class QualityTests(unittest.TestCase):
         script = build_script(self.config, verified, words_per_minute=60)
         report = check_script(self.config, verified, script, duration_tolerance=1.0)
         self.assertTrue(report.passed)
+
+    def test_lesson_quality_reports_content_risks(self) -> None:
+        lesson = AILesson(
+            topic=self.topic,
+            summary="A summary.",
+            sections=tuple(
+                ScriptSection(heading, "Too short.")
+                for heading in self.config.required_sections
+            ),
+            claims=(Claim("The claim is always true.", "model-generated", ()),),
+            uncertainty="",
+            provider_model="test/fake",
+        )
+        report = check_lesson(self.config, lesson)
+        codes = {issue.code for issue in report.issues}
+        self.assertIn("section-length", codes)
+        self.assertIn("lesson-length", codes)
+        self.assertIn("claim-count", codes)
+        self.assertIn("uncertainty", codes)
+        self.assertIn("unsupported-certainty", codes)

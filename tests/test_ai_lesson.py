@@ -30,15 +30,26 @@ class AiLessonTests(unittest.TestCase):
             "summary": "A concise lesson.",
             "uncertainty": "Examples are simplified.",
             "sections": [
-                {"heading": heading, "text": f"Explanation of {heading}."}
+                {
+                    "heading": heading,
+                    "text": (
+                        f"Explanation of {heading} with a concrete mechanism, "
+                        "tradeoff, and carefully scoped example."
+                    ),
+                }
                 for heading in config.required_sections
             ],
             "claims": [
                 {
-                    "statement": "This is a model-generated claim.",
+                    "statement": statement,
                     "evidence_level": "model-generated",
                     "uncertainty": "Simplified for a short lesson.",
                 }
+                for statement in (
+                    "This is a model-generated claim.",
+                    "A second claim explains the mechanism.",
+                    "A third claim describes the practical implication.",
+                )
             ],
         }
         provider = OllamaLessonProvider(

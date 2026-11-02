@@ -116,11 +116,16 @@ class PipelineTests(unittest.TestCase):
                     topic=topic,
                     summary="A model-authored lesson.",
                     sections=tuple(
-                        ScriptSection(heading, f"Model explanation of {heading}.")
+                        ScriptSection(
+                            heading,
+                            f"Model explanation of {heading} with a concrete example and mechanism.",
+                        )
                         for heading in config.required_sections
                     ),
                     claims=(
                         Claim("The concept has an important mechanism.", "model-generated", ()),
+                        Claim("A second claim describes a useful tradeoff.", "model-generated", ()),
+                        Claim("A third claim explains why the example matters.", "model-generated", ()),
                     ),
                     uncertainty="This is recreational model-generated content.",
                     provider_model="test/fake",
@@ -132,5 +137,8 @@ class PipelineTests(unittest.TestCase):
                 LessonHistory(Path(directory) / "history.json"),
                 lesson_provider=FakeLessonProvider(),
             )
-            self.assertEqual(bundle.draft.script.sections[0].text, "Model explanation of The idea.")
+            self.assertEqual(
+                bundle.draft.script.sections[0].text,
+                "Model explanation of The idea with a concrete example and mechanism.",
+            )
             self.assertEqual(bundle.draft.research.sources[0].source_type, "ai-generated")
