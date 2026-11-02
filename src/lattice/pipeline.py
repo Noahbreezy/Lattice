@@ -26,6 +26,7 @@ from .contracts import (
     now_utc,
 )
 from .history import LessonHistory
+from .quality import require_lesson_quality
 from .research import (
     AILesson,
     AILessonProvider,
@@ -219,8 +220,7 @@ def build_script_from_lesson(
 ) -> Script:
     """Convert model-authored lesson sections into the production script."""
 
-    if tuple(section.heading for section in lesson.sections) != tuple(config.required_sections):
-        raise ValueError("AI lesson headings do not match the configured structure.")
+    require_lesson_quality(config, lesson)
     word_count = sum(len(section.text.split()) for section in lesson.sections)
     estimated_duration = max(1, round(word_count / words_per_minute * 60))
     return Script(

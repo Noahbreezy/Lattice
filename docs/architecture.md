@@ -65,8 +65,10 @@ audio/video stream presence, vertical dimensions, and duration.
 `regenerate_scenes` creates a new storyboard version only for selected scenes.
 Lesson providers implement an AI lesson capability and may optionally use a
 source provider for fact-checking. `quality.py` provides automated gates for
-lesson structure, uncertainty labeling, script duration, scene timing, and
-claim coverage before media production. The system should block only failed
+lesson structure, section and lesson length, claim count, uncertainty labeling,
+unsupported certainty language, script duration, scene timing, and claim
+coverage before media production. Malformed or failed model output is surfaced
+as an explicit provider error. The system should block only failed
 automated checks or provider errors; it should not pause for a human lesson
 approval.
 `OllamaLessonProvider` implements this capability through Ollama's local JSON
