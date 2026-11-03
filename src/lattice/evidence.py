@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +44,7 @@ def build_review_evidence(
             (item for item in script.sections if item.heading == scene.script_section_heading),
             None,
         )
+        claim_matches = _semantic_claim_matches(scene.narration, claims)
         scenes.append(
             {
                 "scene_id": scene.scene_id,
@@ -52,7 +54,16 @@ def build_review_evidence(
                 "duration_seconds": scene.duration_seconds,
                 "asset_id": bundle.asset_manifest.assets[index].asset_id,
                 "visual_direction": scene.visual_direction,
-                "claim_ids": [item["claim_id"] for item in claims],
+                "claim_ids": [item["claim_id"] for item in claim_matches],
+                "claim_alignment": [
+                    {
+                        "claim_id": item["claim_id"],
+                        "overlap_terms": item["_overlap_terms"],
+                        "score": item["_score"],
+                    }
+                    for item in claim_matches
+                ],
+                "semantic_alignment_passed": bool(claim_matches),
                 "script_text_hash": hashlib.sha256(
                     (section.text if section else scene.narration).encode("utf-8")
                 ).hexdigest(),
@@ -162,6 +173,34 @@ def build_review_evidence(
         },
         "limitations": limitations,
     }
+
+
+_STOPWORDS = {
+    "a", "an", "and", "are", "as", "at", "can", "does", "for", "from",
+    "how", "in", "is", "it", "of", "on", "or", "that", "the", "this",
+    "to", "what", "when", "which", "why", "with",
+}
+
+
+def _semantic_claim_matches(narration: str, claims: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Map only claims with meaningful lexical overlap to a scene."""
+    words = {
+        word for word in re.findall(r"[a-z0-9]+", narration.lower())
+        if len(word) > 3 and word not in _STOPWORDS
+    }
+    matches = []
+    for claim in claims:
+        claim_words = {
+            word for word in re.findall(r"[a-z0-9]+", claim["statement"].lower())
+            if len(word) > 3 and word not in _STOPWORDS
+        }
+        overlap = sorted(words & claim_words)
+        if overlap:
+            enriched = dict(claim)
+            enriched["_overlap_terms"] = overlap
+            enriched["_score"] = round(len(overlap) / max(len(claim_words), 1), 3)
+            matches.append(enriched)
+    return matches
 
 
 def _read_srt(path: Path | None) -> list[dict[str, Any]]:

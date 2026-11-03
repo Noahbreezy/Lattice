@@ -132,14 +132,30 @@ def run_local_main() -> int:
         )
         repository.save(processing)
         rendered_dir = artifact_dir / "rendered"
+        renderer = FfmpegRenderer(rendered_dir)
         awaiting = render_episode_for_review(
             bundle,
             processing,
-            FfmpegRenderer(rendered_dir),
+            renderer,
             repository,
             LocalObjectStorage(artifact_dir / "review-media"),
             expected_duration=config.video_length_seconds,
         )
+        # Persist the materialized explanatory SVGs, not the pre-render
+        # placeholder manifest, for local inspection and review tooling.
+        if renderer.last_job is not None:
+            bundle_manifest = renderer.last_job.asset_manifest
+            payload["asset_manifest"] = _stable_value(bundle_manifest)
+            payload["render_job"] = _stable_value(renderer.last_job)
+            artifact_path.write_text(
+                json.dumps(payload, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            manifest_path.write_text(
+                json.dumps(_stable_value(bundle_manifest), indent=2, sort_keys=True)
+                + "\n",
+                encoding="utf-8",
+            )
         # Keep the manifest adjacent to the reviewable video for local consumers.
         shutil.copyfile(manifest_path, Path(awaiting.final_video_uri).with_suffix(".manifest.json"))
         rendered_evidence = Path(awaiting.final_video_uri).with_suffix(".evidence.json")

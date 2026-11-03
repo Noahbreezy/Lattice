@@ -287,7 +287,11 @@ async function load(){const r=await fetch('/review-queue',{headers:headers()});
  '<label>End <input id="end" type="number" min="1" value="5"></label><br>'+
  '<button class="approve" onclick="decide(\\'approve\\')">Approve</button>'+
  '<button class="reject" onclick="decide(\\'reject\\')">Reject</button></div>';
- $('#card video').src='/media/'+encodeURIComponent(item.id)}
+ const video=$('#card video');
+ const response=await fetch('/media/'+encodeURIComponent(item.id),{headers:headers()});
+ if(!response.ok){$('#status').textContent='Unable to load video ('+response.status+').';return}
+ video.src=URL.createObjectURL(await response.blob());
+ video.load()}
 async function decide(decision){const criteria=$('#criteria').value.split(',').map(x=>x.trim()).filter(Boolean);
  const feedback=$('#feedback').value; const start=Number($('#start').value);
  const end=Number($('#end').value); const markers=criteria.length?[{start_seconds:start,end_seconds:end,criterion:criteria[0],comment:feedback}]:[];

@@ -13,6 +13,11 @@ class VisualTests(unittest.TestCase):
             asset = IllustratedVisualProvider().create(scene, directory)
             validate_svg(asset.uri)
             self.assertEqual(Path(asset.uri).suffix, ".svg")
+            svg = Path(asset.uri).read_text(encoding="utf-8")
+            self.assertIn("CAUSE", svg)
+            self.assertIn("MECHANISM", svg)
+            self.assertIn("OUTCOME", svg)
+            self.assertIn("marker-end", svg)
 
     def test_validator_rejects_executable_svg_content(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

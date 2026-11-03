@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -31,6 +32,19 @@ class Narration:
 class TtsProvider(Protocol):
     def synthesize(self, text: str, output_path: str | Path) -> Narration:
         """Create a WAV narration and return timing metadata."""
+
+
+def validate_narration(narration: Narration) -> Narration:
+    """Reject missing, empty, or silent audio from any local provider."""
+
+    path = Path(narration.audio_uri)
+    if not path.is_file() or path.stat().st_size == 0:
+        raise RuntimeError("TTS provider did not produce an audio file.")
+    if narration.duration_seconds <= 0 or _audio_is_silent(path):
+        raise RuntimeError("TTS provider produced silent or zero-duration audio.")
+    if not narration.timings:
+        raise RuntimeError("TTS provider did not return word timings.")
+    return narration
 
 
 def reconcile_storyboard_timing(
@@ -100,7 +114,7 @@ class PiperTts:
         )
         if completed.returncode != 0:
             raise RuntimeError(f"Piper narration failed: {completed.stderr.strip()}")
-        return _estimated_narration(output, text, "piper")
+        return validate_narration(_estimated_narration(output, text, "piper"))
 
 
 class WindowsSpeechTts:
@@ -111,6 +125,13 @@ class WindowsSpeechTts:
         self.rate = rate
 
     def synthesize(self, text: str, output_path: str | Path) -> Narration:
+        if not text.strip():
+            raise ValueError("Cannot synthesize empty narration.")
+        if os.name != "nt" and shutil.which("powershell") is None:
+            raise RuntimeError(
+                "WindowsSpeechTts requires Windows PowerShell and System.Speech; "
+                "no cloud TTS fallback is available."
+            )
         output = Path(output_path)
         output.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory() as directory:
@@ -129,9 +150,12 @@ class WindowsSpeechTts:
                 "$s.Dispose()\n",
                 encoding="utf-8",
             )
+            powershell = shutil.which("powershell") or shutil.which("powershell.exe")
+            if powershell is None:
+                raise RuntimeError("Windows PowerShell executable was not found.")
             completed = subprocess.run(
                 [
-                    "powershell",
+                    powershell,
                     "-NoProfile",
                     "-NonInteractive",
                     "-File",
@@ -145,7 +169,7 @@ class WindowsSpeechTts:
             )
         if completed.returncode != 0:
             raise RuntimeError(f"Windows speech synthesis failed: {completed.stderr.strip()}")
-        return _estimated_narration(output, text, "windows-sapi")
+        return validate_narration(_estimated_narration(output, text, "windows-sapi"))
 
 
 def _estimated_narration(path: Path, text: str, provider: str) -> Narration:
@@ -162,6 +186,16 @@ def _wav_duration(path: Path) -> float:
 
     with wave.open(str(path), "rb") as wav:
         return wav.getnframes() / max(1, wav.getframerate())
+
+
+def _audio_is_silent(path: Path) -> bool:
+    import wave
+
+    with wave.open(str(path), "rb") as wav:
+        frames = wav.readframes(wav.getnframes())
+        # PCM silence is all-zero samples. This avoids optional audio packages
+        # while still rejecting the common silent-provider failure.
+        return not frames or not any(frames)
 
 
 def _proportional_timings(words: list[str], duration: float) -> tuple[WordTiming, ...]:

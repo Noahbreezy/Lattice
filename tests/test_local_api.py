@@ -30,6 +30,8 @@ class LocalApiTests(unittest.TestCase):
         self.assertIn(b"Approve", app)
         self.assertIn(b"Reject", app)
         self.assertIn(b"fetch('/review-queue'", app)
+        self.assertIn(b"fetch('/media/'", app)
+        self.assertIn(b"response.blob()", app)
         self.assertIn(b"load()", app)
         connection.request("GET", "/review-queue")
         self.assertEqual(connection.getresponse().status, 401)
