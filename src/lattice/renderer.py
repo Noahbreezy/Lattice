@@ -10,6 +10,7 @@ from .tts import Narration, TtsProvider, reconcile_storyboard_timing
 
 from .contracts import PublishedVideo, RenderJob, RenderJobStatus
 from .pipeline import publish_video
+from .visuals import IllustratedVisualProvider
 
 
 class FfmpegRenderer:
@@ -36,6 +37,7 @@ class FfmpegRenderer:
         subtitle_path = self.output_dir / f"{job.job_id.replace(':', '_')}.srt"
         duration = max(1, sum(scene.duration_seconds for scene in job.storyboard.scenes))
         with tempfile.TemporaryDirectory() as directory:
+            job = _materialize_assets(job, Path(directory))
             narration = self._narrate(job, Path(directory))
             if narration is not None:
                 job = replace(
@@ -73,14 +75,17 @@ def _render_command(
     duration: int,
     audio_uri: str | None,
 ) -> list[str]:
+    use_svg_inputs = _supports_svg(ffmpeg)
     colors = ("0x172554", "0x1e3a8a", "0x164e63", "0x365314", "0x713f12")
     inputs: list[str] = [ffmpeg, "-y"]
     labels: list[str] = []
     for index, scene in enumerate(job.storyboard.scenes):
-        inputs.extend([
-            "-f", "lavfi", "-i",
-            f"color=c={colors[index % len(colors)]}:s=1080x1920:r=30:d={scene.duration_seconds}",
-        ])
+        if use_svg_inputs:
+            inputs.extend(["-loop", "1", "-framerate", "30", "-i",
+                           job.asset_manifest.assets[index].uri])
+        else:
+            inputs.extend(["-f", "lavfi", "-i",
+                           f"color=c={colors[index % len(colors)]}:s=1080x1920:r=30:d={scene.duration_seconds}"])
         label = f"[v{index}]"
         labels.append(label)
     if audio_uri:
@@ -93,7 +98,9 @@ def _render_command(
     for index, _scene in enumerate(job.storyboard.scenes):
         accent = "0xfbbf24" if index % 2 == 0 else "0x67e8f9"
         filters.append(
-            f"[{index}:v]drawbox=x=90:y={240 + index * 35}:w=900:h=8:"
+            f"[{index}:v]scale=1080:1920,format=yuv420p,"
+            f"trim=duration={job.storyboard.scenes[index].duration_seconds},"
+            f"setpts=PTS-STARTPTS,drawbox=x=90:y={240 + index * 35}:w=900:h=8:"
             f"color={accent}:t=fill,drawbox=x=120:y=1450:w=840:h=260:"
             f"color=0x0f172a@0.55:t=fill[v{index}]"
         )
@@ -104,6 +111,27 @@ def _render_command(
         "-t", str(duration), "-c:v", "libx264", "-pix_fmt", "yuv420p",
         "-af", "apad", "-c:a", "aac", str(output),
     ]
+
+
+def _supports_svg(ffmpeg: str) -> bool:
+    try:
+        completed = subprocess.run(
+            [ffmpeg, "-decoders"], capture_output=True, text=True, check=False
+        )
+    except OSError:
+        return False
+    return completed.returncode == 0 and " svg " in completed.stdout
+
+
+def _materialize_assets(job: RenderJob, directory: Path) -> RenderJob:
+    provider = IllustratedVisualProvider()
+    assets = []
+    for index, asset in enumerate(job.asset_manifest.assets):
+        if Path(asset.uri).is_file():
+            assets.append(asset)
+            continue
+        assets.append(provider.create(job.storyboard.scenes[index], directory / "assets"))
+    return replace(job, asset_manifest=replace(job.asset_manifest, assets=tuple(assets)))
 
 
 def _srt(job: RenderJob, narration: Narration | None = None) -> str:
