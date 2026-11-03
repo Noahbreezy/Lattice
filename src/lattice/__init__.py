@@ -52,6 +52,7 @@ from .media_quality import MediaIssue, MediaReport, check_media
 from .local_api import create_review_server
 from .storage import LocalObjectStorage, StoredObject
 from .publication import LocalPublisher, Publication, Publisher
+from .production import render_episode_for_review
 from .worker import LocalWorker
 from .quality import (
     QualityIssue,
@@ -106,6 +107,7 @@ __all__ = [
     "LocalPublisher",
     "Publication",
     "Publisher",
+    "render_episode_for_review",
     "LocalWorker",
     "QualityIssue",
     "QualityReport",
