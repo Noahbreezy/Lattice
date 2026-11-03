@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from .contracts import Storyboard, StoryboardScene
+
 
 @dataclass(frozen=True)
 class WordTiming:
@@ -29,6 +31,49 @@ class Narration:
 class TtsProvider(Protocol):
     def synthesize(self, text: str, output_path: str | Path) -> Narration:
         """Create a WAV narration and return timing metadata."""
+
+
+def reconcile_storyboard_timing(
+    storyboard: Storyboard, narration: Narration
+) -> Storyboard:
+    """Resize scenes to the measured narration while preserving scene order."""
+
+    if narration.duration_seconds <= 0:
+        raise ValueError("Narration duration must be positive.")
+    if not narration.timings:
+        raise ValueError("Narration must include word timings.")
+    target_seconds = max(len(storyboard.scenes), round(narration.duration_seconds))
+    word_counts = [max(1, len(scene.narration.split())) for scene in storyboard.scenes]
+    total_words = sum(word_counts)
+    exact = [target_seconds * count / total_words for count in word_counts]
+    durations = [max(1, int(value)) for value in exact]
+    while sum(durations) < target_seconds:
+        index = max(
+            range(len(durations)),
+            key=lambda item: exact[item] - durations[item],
+        )
+        durations[index] += 1
+    while sum(durations) > target_seconds:
+        index = max(
+            (item for item, duration in enumerate(durations) if duration > 1),
+            key=lambda item: durations[item] - exact[item],
+        )
+        durations[index] -= 1
+    scenes = tuple(
+        StoryboardScene(
+            scene_id=scene.scene_id,
+            script_section_heading=scene.script_section_heading,
+            narration=scene.narration,
+            visual_direction=scene.visual_direction,
+            duration_seconds=durations[index],
+        )
+        for index, scene in enumerate(storyboard.scenes)
+    )
+    return Storyboard(
+        scenes=scenes,
+        version=storyboard.version + 1,
+        provenance=storyboard.provenance,
+    )
 
 
 class PiperTts:

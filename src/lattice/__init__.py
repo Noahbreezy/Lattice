@@ -40,7 +40,14 @@ from .pipeline import (
 )
 from .persistence import EpisodeRepository, Job
 from .renderer import FfmpegRenderer
-from .tts import Narration, PiperTts, TtsProvider, WindowsSpeechTts, WordTiming
+from .tts import (
+    Narration,
+    PiperTts,
+    TtsProvider,
+    WindowsSpeechTts,
+    WordTiming,
+    reconcile_storyboard_timing,
+)
 from .media_quality import MediaIssue, MediaReport, check_media
 from .local_api import create_review_server
 from .storage import LocalObjectStorage, StoredObject
@@ -65,7 +72,7 @@ from .research import (
     require_verified_research,
     validate_research,
 )
-from .visuals import IllustratedVisualProvider, VisualProvider
+from .visuals import IllustratedVisualProvider, VisualProvider, validate_svg
 from .review import QueueItem, ReviewQueue
 from .retention import RetentionAction, StorageLocation, StoredVideo, plan_retention
 
@@ -88,6 +95,7 @@ __all__ = [
     "TtsProvider",
     "WindowsSpeechTts",
     "WordTiming",
+    "reconcile_storyboard_timing",
     "MediaIssue",
     "MediaReport",
     "check_media",
@@ -110,6 +118,7 @@ __all__ = [
     "WikipediaResearchProvider",
     "IllustratedVisualProvider",
     "VisualProvider",
+    "validate_svg",
     "LessonHistory",
     "ProjectConfig",
     "RetentionAction",
