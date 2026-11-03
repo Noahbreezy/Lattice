@@ -156,6 +156,19 @@ class EpisodeRepository:
         ).fetchall()
         return tuple(_episode_from_row(row) for row in rows)
 
+    def list_review_queue(self) -> tuple[Episode, ...]:
+        """Return episodes currently awaiting human review."""
+
+        rows = self._connection.execute(
+            """
+            SELECT * FROM episodes
+            WHERE status = ?
+            ORDER BY created_at ASC, id ASC
+            """,
+            (EpisodeStatus.AWAITING_REVIEW.value,),
+        ).fetchall()
+        return tuple(_episode_from_row(row) for row in rows)
+
     def claim_next(self) -> Episode:
         """Atomically claim the highest-priority queued episode."""
 

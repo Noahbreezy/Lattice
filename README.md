@@ -246,3 +246,18 @@ When configuration fields, workflow stages, or public APIs change, update this
 README and the relevant example configuration in the same change. Add or update
 tests for validation behavior. Future integrations should document required
 credentials and provider-specific setup without committing secrets.
+## Local offline review
+
+Build a deterministic, provider-free episode and submit it to the local review
+database:
+
+```bash
+lattice-run-local configs/knowledge-channel.json
+```
+
+The command writes a JSON artifact and asset manifest under
+`var/lattice-artifacts`, persists the episode in `var/lattice.sqlite`, and
+prints its `AWAITING_REVIEW` status. Use `--database`, `--output`, and
+`--history` to select local paths. It does not publish or contact external
+services; invalid configuration and pipeline failures are reported as
+non-zero, actionable errors.

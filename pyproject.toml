@@ -11,6 +11,7 @@ requires-python = ">=3.11"
 [project.scripts]
 lattice-validate = "lattice.cli:main"
 lattice-review-server = "lattice.cli:review_server_main"
+lattice-run-local = "lattice.cli:run_local_main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

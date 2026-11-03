@@ -44,7 +44,7 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
         if path == "/review-queue":
             self._write(
                 HTTPStatus.OK,
-                [self._episode_json(item) for item in self.repository.list_queue()],
+                [self._episode_json(item) for item in self.repository.list_review_queue()],
             )
             return
         if path.startswith("/episodes/"):
