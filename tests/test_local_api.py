@@ -11,6 +11,40 @@ from lattice.persistence import EpisodeRepository
 
 
 class LocalApiTests(unittest.TestCase):
+    def test_mobile_review_app_and_queue_require_api_token(self) -> None:
+        repository = EpisodeRepository()
+        repository.save(Episode(
+            "queued-video", Topic("A topic", "systems"),
+            EpisodeStatus.AWAITING_REVIEW, 1, "private://video.mp4",
+        ))
+        token = "local-review-token"
+        server = create_review_server(repository, port=0, review_token=token)
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request("GET", "/app")
+        response = connection.getresponse()
+        self.assertEqual(response.status, 200)
+        app = response.read()
+        self.assertIn(b"playsinline", app)
+        self.assertIn(b"Approve", app)
+        self.assertIn(b"Reject", app)
+        self.assertIn(b"fetch('/review-queue'", app)
+        self.assertIn(b"load()", app)
+        connection.request("GET", "/review-queue")
+        self.assertEqual(connection.getresponse().status, 401)
+        connection.request(
+            "GET", "/review-queue",
+            headers={"Authorization": "Bearer " + token},
+        )
+        response = connection.getresponse()
+        self.assertEqual(response.status, 200)
+        self.assertEqual(json.loads(response.read())[0]["id"], "queued-video")
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+        repository.close()
+
     def test_review_api_requires_token_and_records_approval(self) -> None:
         repository = EpisodeRepository()
         episode = Episode(
@@ -118,6 +152,37 @@ class LocalApiTests(unittest.TestCase):
             response = connection.getresponse()
             self.assertEqual(response.status, 200)
             self.assertEqual(response.read(), b"mp4")
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+            repository.close()
+
+    def test_media_route_rejects_paths_outside_configured_storage(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            media_root = Path(directory) / "media"
+            media_root.mkdir()
+            outside = Path(directory) / "outside.mp4"
+            outside.write_bytes(b"private")
+            repository = EpisodeRepository()
+            repository.save(Episode(
+                "episode-outside",
+                Topic("A topic", "systems"),
+                EpisodeStatus.AWAITING_REVIEW,
+                1,
+                str(outside),
+            ))
+            server = create_review_server(
+                repository, port=0, review_token="token", media_root=media_root
+            )
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            connection = HTTPConnection("127.0.0.1", server.server_port)
+            connection.request(
+                "GET",
+                "/media/episode-outside",
+                headers={"Authorization": "Bearer token"},
+            )
+            self.assertEqual(connection.getresponse().status, 403)
             server.shutdown()
             server.server_close()
             thread.join(timeout=2)

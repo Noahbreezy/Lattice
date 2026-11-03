@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hmac
+import ipaddress
 import json
 import mimetypes
 import os
@@ -131,6 +132,15 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
     def _authorized(self) -> bool:
         if not self.review_token:
             return True
+        path = urlparse(self.path).path
+        # A browser can load the local shell and media element without adding
+        # headers; all state-changing and JSON routes remain bearer-protected.
+        if path in {"/app"} or path.startswith("/media/"):
+            try:
+                if ipaddress.ip_address(self.client_address[0]).is_loopback:
+                    return True
+            except ValueError:
+                pass
         supplied = self.headers.get("Authorization", "")
         expected = "Bearer " + self.review_token
         if hmac.compare_digest(supplied, expected):
@@ -256,25 +266,32 @@ _REVIEW_APP = """<!doctype html>
 body{font:16px system-ui;background:#0f172a;color:#e2e8f0;max-width:640px;margin:auto;padding:16px}
 video{width:100%;border-radius:16px;background:#020617}button,textarea{font:1rem;padding:12px;border-radius:10px}
 button{border:0;margin:6px 4px 6px 0}.approve{background:#86efac}.reject{background:#fca5a5}
-textarea{width:96%;min-height:80px}.card{background:#1e293b;padding:16px;border-radius:16px;margin-top:16px}
+textarea,input{width:96%;min-height:40px;padding:8px;box-sizing:border-box}.card{background:#1e293b;padding:16px;border-radius:16px;margin-top:16px}
 </style>
-<h1>Lattice review</h1><p id="status">Loading queue…</p><main id="card"></main>
+<h1>Lattice review</h1><label>Bearer token (kept in memory only)
+<input id="token" type="password" autocomplete="off"></label>
+<p id="status">Loading queue…</p><nav id="queue"></nav><main id="card"></main>
 <script>
-let item;
-async function load(){const r=await fetch('/review-queue'); const q=await r.json(); item=q[0];
- if(!item){document.querySelector('#status').textContent='No videos waiting for processing.';return}
- document.querySelector('#status').textContent=item.topic+' · revision '+item.revision;
- document.querySelector('#card').innerHTML=`<div class="card"><video controls playsinline src="/media/${item.id}"></video>
- <p>Reject criteria (comma separated)</p><input id="criteria" placeholder="visual_clarity, pacing">
- <textarea id="feedback" placeholder="Optional feedback"></textarea><br>
- <label>Start <input id="start" type="number" min="0" value="0"></label>
- <label>End <input id="end" type="number" min="1" value="5"></label><br>
- <button class="approve" onclick="decide('approve')">Approve</button>
- <button class="reject" onclick="decide('reject')">Reject</button></div>`}
-async function decide(decision){const criteria=document.querySelector('#criteria').value.split(',').map(x=>x.trim()).filter(Boolean);
- const feedback=document.querySelector('#feedback').value; const start=Number(document.querySelector('#start').value);
- const end=Number(document.querySelector('#end').value); const markers=criteria.length?[{start_seconds:start,end_seconds:end,criterion:criteria[0],comment:feedback}]:[];
- const r=await fetch('/episodes/'+item.id+'/review',{method:'POST',
- headers:{'Content-Type':'application/json'},body:JSON.stringify({decision,reviewer_id:'owner',criteria,markers,feedback})});
- if(!r.ok){alert((await r.json()).error);return} load()} load();
+let item,q=[];
+const $=id=>document.querySelector(id);
+function headers(){const token=$('#token').value.trim(); return token?{'Authorization':'Bearer '+token}:{}}
+async function load(){const r=await fetch('/review-queue',{headers:headers()});
+ if(!r.ok){$('#status').textContent='Unable to load queue ('+r.status+').';return}
+ q=await r.json(); item=q[0]; $('#queue').textContent=q.length?'Queue: '+q.map(x=>x.id).join(', '):'';
+ if(!item){$('#status').textContent='No videos waiting for review.';$('#card').textContent='';return}
+ $('#status').textContent=item.topic+' · revision '+item.revision;
+ $('#card').innerHTML='<div class="card"><video controls playsinline></video>'+
+ '<p>Reject criteria (comma separated)</p><input id="criteria" placeholder="visual_clarity, pacing">'+
+ '<textarea id="feedback" placeholder="Optional feedback"></textarea><br>'+
+ '<label>Start <input id="start" type="number" min="0" value="0"></label>'+
+ '<label>End <input id="end" type="number" min="1" value="5"></label><br>'+
+ '<button class="approve" onclick="decide(\\'approve\\')">Approve</button>'+
+ '<button class="reject" onclick="decide(\\'reject\\')">Reject</button></div>';
+ $('#card video').src='/media/'+encodeURIComponent(item.id)}
+async function decide(decision){const criteria=$('#criteria').value.split(',').map(x=>x.trim()).filter(Boolean);
+ const feedback=$('#feedback').value; const start=Number($('#start').value);
+ const end=Number($('#end').value); const markers=criteria.length?[{start_seconds:start,end_seconds:end,criterion:criteria[0],comment:feedback}]:[];
+ const r=await fetch('/episodes/'+encodeURIComponent(item.id)+'/review',{method:'POST',
+ headers:Object.assign({'Content-Type':'application/json'},headers()),body:JSON.stringify({decision,reviewer_id:'owner',criteria,markers,feedback})});
+ if(!r.ok){alert((await r.json()).error);return} load()} $('#token').addEventListener('change',load); load();
 </script>"""

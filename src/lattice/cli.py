@@ -48,15 +48,22 @@ def review_server_main() -> int:
     parser.add_argument("--database", default="var/lattice.sqlite")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument(
+        "--media-root",
+        default="var/lattice-artifacts/review-media",
+        help="Directory containing generated review videos.",
+    )
     args = parser.parse_args()
     database_path = Path(args.database)
     if str(database_path) != ":memory:":
         database_path.parent.mkdir(parents=True, exist_ok=True)
-    database_path = Path(args.database)
-    if str(database_path) != ":memory:":
-        database_path.parent.mkdir(parents=True, exist_ok=True)
     repository = EpisodeRepository(args.database)
-    server = create_review_server(repository, args.host, args.port)
+    server = create_review_server(
+        repository,
+        args.host,
+        args.port,
+        media_root=args.media_root,
+    )
     print(f"Lattice review API listening on http://{args.host}:{args.port}")
     try:
         server.serve_forever()

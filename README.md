@@ -157,7 +157,10 @@ from lattice import EpisodeRepository, create_review_server
 
 repository = EpisodeRepository("var/lattice.sqlite")
 server = create_review_server(
-    repository, host="127.0.0.1", port=8765, media_root="var/videos"
+    repository,
+    host="127.0.0.1",
+    port=8765,
+    media_root="var/lattice-artifacts/review-media",
 )
 print("Review API: http://127.0.0.1:8765")
 try:
@@ -183,7 +186,9 @@ Once installed, the same server is available as:
 
 ```powershell
 $env:LATTICE_REVIEW_TOKEN = "change-this-local-token"
-lattice-review-server --database var\lattice.sqlite
+lattice-review-server `
+  --database var\lattice.sqlite `
+  --media-root var\lattice-artifacts\review-media
 ```
 
 The local FFmpeg renderer creates a real private MP4 from a successful render
