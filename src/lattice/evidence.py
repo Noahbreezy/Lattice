@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .pipeline import ProductionBundle
+from .media_quality import check_media, media_fingerprint
 
 
 def _sha256(path: Path) -> str:
@@ -75,6 +76,42 @@ def build_review_evidence(
             paths[name] = str(path)
             hashes[name] = _sha256(path)
 
+    media: dict[str, Any] = {}
+    subtitle_path = None
+    if video_path is not None:
+        video = Path(video_path)
+        media = media_fingerprint(video)
+        report = check_media(video)
+        media["validation"] = {
+            "passed": report.passed,
+            "issues": [{"code": issue.code, "message": issue.message} for issue in report.issues],
+            "audio": report.has_audio,
+            "width": report.width,
+            "height": report.height,
+            "dimensions": f"{report.width}x{report.height}" if report.width else None,
+        }
+        if report.metrics is not None:
+            media["animation_metrics"] = report.metrics
+        candidate = video.with_suffix(".srt")
+        if candidate.is_file():
+            subtitle_path = candidate
+            media["subtitle_path"] = str(candidate)
+            media["subtitle_sha256"] = _sha256(candidate)
+
+    subtitle_entries = _read_srt(subtitle_path) if subtitle_path else []
+    scene_mappings = []
+    for index, scene in enumerate(bundle.storyboard.scenes):
+        entry = subtitle_entries[index] if index < len(subtitle_entries) else None
+        scene_mappings.append({
+            "scene_id": scene.scene_id,
+            "srt_index": index + 1,
+            "start_seconds": entry["start"] if entry else None,
+            "end_seconds": entry["end"] if entry else None,
+            "narration": scene.narration,
+            "srt_narration": entry["text"] if entry else None,
+            "narration_matches_srt": bool(entry and entry["text"] == scene.narration),
+        })
+
     limitations = [
         "Review evidence describes deterministic pipeline inputs and does not establish factual truth.",
         "Animation metrics are renderer-declared metrics, not perceptual measurements.",
@@ -85,10 +122,17 @@ def build_review_evidence(
         limitations.append("Asset manifest contains placeholder visual references.")
 
     return {
-        "evidence_version": 1,
+        "evidence_version": 2,
         "topic": {"title": research.topic.title, "subject_area": research.topic.subject_area},
         "hashes": hashes,
         "paths": paths,
+        "media": media,
+        "srt": {
+            "present": bool(subtitle_entries),
+            "entry_count": len(subtitle_entries),
+            "scene_mappings": scene_mappings,
+            "timing_valid": _valid_srt_timing(subtitle_entries, len(bundle.storyboard.scenes)),
+        },
         "provenance": {
             "research": f"research:{research.topic.key}:v1",
             "script": script.provenance.artifact_id if script.provenance else "",
@@ -118,6 +162,39 @@ def build_review_evidence(
         },
         "limitations": limitations,
     }
+
+
+def _read_srt(path: Path | None) -> list[dict[str, Any]]:
+    if path is None:
+        return []
+    entries = []
+    for block in path.read_text(encoding="utf-8").strip().split("\n\n"):
+        lines = block.splitlines()
+        if len(lines) < 3 or "-->" not in lines[1]:
+            continue
+        start, end = (item.strip() for item in lines[1].split("-->", 1))
+        entries.append({
+            "index": lines[0],
+            "start": _srt_seconds(start),
+            "end": _srt_seconds(end),
+            "text": "\n".join(lines[2:]),
+        })
+    return entries
+
+
+def _srt_seconds(timestamp: str) -> float:
+    hours, minutes, remainder = timestamp.replace(",", ".").split(":")
+    return round(int(hours) * 3600 + int(minutes) * 60 + float(remainder), 3)
+
+
+def _valid_srt_timing(entries: list[dict[str, Any]], scene_count: int) -> bool:
+    if len(entries) != scene_count:
+        return False
+    return all(
+        entry["end"] > entry["start"]
+        and (index == 0 or entry["start"] >= entries[index - 1]["end"])
+        for index, entry in enumerate(entries)
+    )
 
 
 def write_review_evidence(evidence: dict[str, Any], path: str | Path) -> Path:

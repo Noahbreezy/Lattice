@@ -49,7 +49,7 @@ from .tts import (
     WordTiming,
     reconcile_storyboard_timing,
 )
-from .media_quality import MediaIssue, MediaReport, check_media
+from .media_quality import MediaIssue, MediaReport, check_media, measure_animation, media_fingerprint
 from .local_api import create_review_server
 from .storage import LocalObjectStorage, StoredObject
 from .publication import LocalPublisher, Publication, Publisher
@@ -101,6 +101,8 @@ __all__ = [
     "MediaIssue",
     "MediaReport",
     "check_media",
+    "measure_animation",
+    "media_fingerprint",
     "check_lesson",
     "create_review_server",
     "LocalObjectStorage",
