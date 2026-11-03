@@ -41,6 +41,8 @@ class ReviewQueue:
         return self._items.pop(0)
 
     def submit_for_review(self, episode: Episode, final_video_uri: str) -> Episode:
+        if episode.status != EpisodeStatus.PROCESSING:
+            raise ValueError("Only processing episodes can be submitted for review.")
         updated = Episode(
             id=episode.id,
             topic=episode.topic,
