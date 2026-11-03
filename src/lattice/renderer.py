@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import subprocess
 import tempfile
+from dataclasses import replace
 from pathlib import Path
-from .tts import Narration, TtsProvider
+from .tts import Narration, TtsProvider, reconcile_storyboard_timing
 
 from .contracts import PublishedVideo, RenderJob, RenderJobStatus
 from .pipeline import publish_video
@@ -36,6 +37,14 @@ class FfmpegRenderer:
         duration = max(1, sum(scene.duration_seconds for scene in job.storyboard.scenes))
         with tempfile.TemporaryDirectory() as directory:
             narration = self._narrate(job, Path(directory))
+            if narration is not None:
+                job = replace(
+                    job,
+                    storyboard=reconcile_storyboard_timing(job.storyboard, narration),
+                )
+                duration = max(
+                    1, sum(scene.duration_seconds for scene in job.storyboard.scenes)
+                )
             subtitle_path.write_text(_srt(job, narration), encoding="utf-8")
             command = _render_command(
                 self.ffmpeg, job, output, duration, narration.audio_uri if narration else None

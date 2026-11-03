@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Protocol
 
@@ -12,6 +13,28 @@ from .contracts import AssetReference, StoryboardScene
 class VisualProvider(Protocol):
     def create(self, scene: StoryboardScene, output_dir: str | Path) -> AssetReference:
         """Create a visual asset for one scene."""
+
+
+def validate_svg(path: str | Path) -> None:
+    """Reject malformed or unreadable SVGs before they enter a render job."""
+
+    asset = Path(path)
+    if not asset.is_file() or asset.stat().st_size == 0:
+        raise ValueError(f"SVG asset is missing or empty: {asset}")
+    try:
+        root = ET.fromstring(asset.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ET.ParseError) as exc:
+        raise ValueError(f"SVG asset is not valid XML: {asset}") from exc
+    if root.tag.rsplit("}", 1)[-1] != "svg":
+        raise ValueError(f"SVG asset root element must be <svg>: {asset}")
+    if root.attrib.get("width") != "1080" or root.attrib.get("height") != "1920":
+        raise ValueError(f"SVG asset must be 1080x1920: {asset}")
+    if not any(element.tag.rsplit("}", 1)[-1] == "text" and (element.text or "").strip()
+               for element in root.iter()):
+        raise ValueError(f"SVG asset must contain readable text: {asset}")
+    if any(element.tag.rsplit("}", 1)[-1] in {"script", "foreignObject"}
+           for element in root.iter()):
+        raise ValueError(f"SVG asset contains unsupported executable content: {asset}")
 
 
 class IllustratedVisualProvider:
@@ -33,4 +56,5 @@ class IllustratedVisualProvider:
 <text x="120" y="1635" fill="#cbd5e1" font-size="26" font-family="sans-serif">{direction[:90]}</text>
 </svg>"""
         path.write_text(svg, encoding="utf-8")
+        validate_svg(path)
         return AssetReference(scene.scene_id + "-illustration", "svg-illustration", str(path))
