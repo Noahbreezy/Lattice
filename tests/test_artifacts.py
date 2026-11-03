@@ -18,6 +18,7 @@ from lattice.pipeline import (
     create_render_job,
     publish_video,
 )
+from lattice.evidence import build_review_evidence
 
 
 class ArtifactContractTests(unittest.TestCase):
@@ -64,6 +65,27 @@ class ArtifactContractTests(unittest.TestCase):
             AssetManifest((asset, asset))
         with self.assertRaisesRegex(ConfigError, "SHA-256"):
             ArtifactProvenance("artifact-1", content_hash="not-a-hash")
+
+    def test_review_evidence_is_source_and_scene_traceable(self) -> None:
+        evidence = build_review_evidence(self._bundle())
+        self.assertEqual(len(evidence["claims"]), len(evidence["sources"]) * 0 + 1)
+        self.assertEqual(
+            evidence["timing"]["storyboard_seconds"],
+            sum(scene.duration_seconds for scene in self.storyboard.scenes),
+        )
+        self.assertTrue(evidence["scenes"][0]["claim_ids"])
+        self.assertEqual(len(evidence["scenes"][0]["script_text_hash"]), 64)
+        self.assertIn("limitations", evidence)
+
+    def _bundle(self):
+        from lattice.pipeline import ProductionBundle, EpisodeDraft
+        from lattice.pipeline import create_render_job
+        return ProductionBundle(
+            EpisodeDraft(self.script.topic, build_research_packet(self.script.topic), self.script),
+            self.storyboard,
+            self.manifest,
+            create_render_job(self.storyboard, self.manifest),
+        )
 
 
 if __name__ == "__main__":

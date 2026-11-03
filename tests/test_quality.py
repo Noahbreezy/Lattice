@@ -69,3 +69,21 @@ class QualityTests(unittest.TestCase):
         self.assertIn("claim-count", codes)
         self.assertIn("uncertainty", codes)
         self.assertIn("unsupported-certainty", codes)
+
+    def test_lesson_quality_rejects_placeholder_content(self) -> None:
+        lesson = AILesson(
+            topic=self.topic,
+            summary="placeholder lesson",
+            sections=tuple(
+                ScriptSection(heading, "Useful explanation with enough words for review.")
+                for heading in self.config.required_sections
+            ),
+            claims=tuple(
+                Claim(f"Claim {index} has substantive wording.", "supported", (0,))
+                for index in range(3)
+            ),
+            uncertainty="Scope is limited.",
+            provider_model="test/fake",
+        )
+        codes = {issue.code for issue in check_lesson(self.config, lesson).issues}
+        self.assertIn("placeholder-content", codes)

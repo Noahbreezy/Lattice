@@ -245,7 +245,14 @@ def validate_research(packet: ResearchPacket) -> tuple[ResearchIssue, ...]:
                     index,
                 )
             )
-    if any(source.source_type.strip().lower() == "placeholder" for source in packet.sources):
+    if any(
+        any(
+            marker in value.lower()
+            for marker in ("placeholder", "example.invalid", "research-required")
+        )
+        for source in packet.sources
+        for value in (source.title, source.citation, source.url, source.source_type)
+    ):
         issues.append(
             ResearchIssue(
                 "placeholder-source",

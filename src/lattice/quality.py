@@ -94,6 +94,14 @@ def check_lesson(
         + [section.text for section in lesson.sections]
         + [claim.statement for claim in lesson.claims]
     ).lower()
+    placeholder_terms = ("placeholder", "lorem ipsum", "todo", "tbd")
+    if any(term in content for term in placeholder_terms):
+        issues.append(
+            QualityIssue(
+                "placeholder-content",
+                "Lesson contains placeholder or unfinished content.",
+            )
+        )
     certainty_terms = tuple(
         term
         for term in _UNSUPPORTED_CERTAINTY

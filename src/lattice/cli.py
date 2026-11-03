@@ -13,6 +13,7 @@ from enum import Enum
 from pathlib import Path
 
 from .config import ConfigError, load_config
+from .evidence import build_review_evidence, write_review_evidence
 from .contracts import Episode, EpisodeStatus
 from .history import LessonHistory
 from .local_api import create_review_server
@@ -115,6 +116,15 @@ def run_local_main() -> int:
             + "\n",
             encoding="utf-8",
         )
+        evidence_path = artifact_dir / f"{episode_id}.evidence.json"
+        write_review_evidence(
+            build_review_evidence(
+                bundle,
+                artifact_path=artifact_path,
+                manifest_path=manifest_path,
+            ),
+            evidence_path,
+        )
 
         repository = EpisodeRepository(args.database)
         processing = Episode(
@@ -132,9 +142,18 @@ def run_local_main() -> int:
         )
         # Keep the manifest adjacent to the reviewable video for local consumers.
         shutil.copyfile(manifest_path, Path(awaiting.final_video_uri).with_suffix(".manifest.json"))
+        rendered_evidence = Path(awaiting.final_video_uri).with_suffix(".evidence.json")
+        evidence = build_review_evidence(
+            bundle,
+            artifact_path=artifact_path,
+            manifest_path=manifest_path,
+            video_path=awaiting.final_video_uri,
+        )
+        write_review_evidence(evidence, rendered_evidence)
         print(f"Episode: {awaiting.id}")
         print(f"Artifact: {artifact_path}")
         print(f"Manifest: {manifest_path}")
+        print(f"Evidence: {evidence_path}")
         print(f"Queue status: {awaiting.status.value}")
         return 0
     except (ConfigError, OSError, RuntimeError, ValueError, sqlite3.Error) as error:

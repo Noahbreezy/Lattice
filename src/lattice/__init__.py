@@ -38,6 +38,7 @@ from .pipeline import (
     publish_video,
     build_production_bundle,
 )
+from .evidence import build_review_evidence, write_review_evidence
 from .persistence import EpisodeRepository, Job
 from .renderer import FfmpegRenderer
 from .tts import (
@@ -144,6 +145,8 @@ __all__ = [
     "StoredVideo",
     "Topic",
     "build_asset_manifest",
+    "build_review_evidence",
+    "write_review_evidence",
     "build_demo_research_packet",
     "build_script_from_lesson",
     "regenerate_scenes",
