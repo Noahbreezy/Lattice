@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 
 from .config import ProjectConfig
 from .contracts import ResearchPacket, Script
@@ -56,11 +56,19 @@ def check_lesson(
     actual = tuple(section.heading for section in lesson.sections)
     if actual != expected:
         issues.append(
-            QualityIssue("required-sections", "Lesson headings do not match the configured structure.")
+            QualityIssue(
+                "required-sections",
+                "Lesson headings do not match the configured structure.",
+            )
         )
 
-    section_word_counts = tuple(len(section.text.split()) for section in lesson.sections)
-    if any(count < min_section_words or count > max_section_words for count in section_word_counts):
+    section_word_counts = tuple(
+        len(section.text.split()) for section in lesson.sections
+    )
+    if any(
+        count < min_section_words or count > max_section_words
+        for count in section_word_counts
+    ):
         issues.append(
             QualityIssue(
                 "section-length",
@@ -86,7 +94,9 @@ def check_lesson(
         )
     if not lesson.uncertainty.strip():
         issues.append(
-            QualityIssue("uncertainty", "Lesson must state its uncertainty or scope plainly.")
+            QualityIssue(
+                "uncertainty", "Lesson must state its uncertainty or scope plainly."
+            )
         )
 
     content = " ".join(
@@ -94,6 +104,14 @@ def check_lesson(
         + [section.text for section in lesson.sections]
         + [claim.statement for claim in lesson.claims]
     ).lower()
+    placeholder_terms = ("placeholder", "lorem ipsum", "todo", "tbd")
+    if any(term in content for term in placeholder_terms):
+        issues.append(
+            QualityIssue(
+                "placeholder-content",
+                "Lesson contains placeholder or unfinished content.",
+            )
+        )
     certainty_terms = tuple(
         term
         for term in _UNSUPPORTED_CERTAINTY
@@ -136,7 +154,10 @@ def check_script(
     actual = tuple(section.heading for section in script.sections)
     if actual != expected:
         issues.append(
-            QualityIssue("required-sections", "Script headings do not match the configured structure.")
+            QualityIssue(
+                "required-sections",
+                "Script headings do not match the configured structure.",
+            )
         )
     lower_bound = config.video_length_seconds * (1 - duration_tolerance)
     upper_bound = config.video_length_seconds * (1 + duration_tolerance)
@@ -149,11 +170,12 @@ def check_script(
         )
     if script.source_claim_count != len(research.claims):
         issues.append(
-            QualityIssue("claim-count", "Script claim count does not match the research packet.")
+            QualityIssue(
+                "claim-count", "Script claim count does not match the research packet."
+            )
         )
     issues.extend(
-        QualityIssue(issue.code, issue.message)
-        for issue in validate_research(research)
+        QualityIssue(issue.code, issue.message) for issue in validate_research(research)
     )
     return QualityReport(tuple(issues))
 

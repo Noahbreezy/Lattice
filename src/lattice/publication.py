@@ -18,14 +18,20 @@ class Publication:
 
 
 class Publisher(Protocol):
-    def publish(self, video: PublishedVideo, title: str, description: str) -> Publication:
+    def publish(
+        self, video: PublishedVideo, title: str, description: str
+    ) -> Publication:
         """Publish an approved video through a configured platform adapter."""
 
 
 class LocalPublisher:
     """Safe local substitute that records intent without contacting a platform."""
 
-    def publish(self, video: PublishedVideo, title: str, description: str) -> Publication:
+    def publish(
+        self, video: PublishedVideo, title: str, description: str
+    ) -> Publication:
         if video.approval_state.value != "approved":
             raise ValueError("Only approved videos can be published.")
-        return Publication(video.video_id, "local", "simulated", remote_id=video.video_id)
+        return Publication(
+            video.video_id, "local", "simulated", remote_id=video.video_id
+        )

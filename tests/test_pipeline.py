@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from lattice.config import load_config
-from lattice.contracts import Claim, ResearchPacket, Source, Topic
+from lattice.contracts import Claim, ResearchPacket, ScriptSection, Source, Topic
 from lattice.history import LessonHistory
 from lattice.pipeline import (
     build_demo_research_packet,
@@ -15,8 +15,7 @@ from lattice.pipeline import (
     record_completed_episode,
     regenerate_scenes,
 )
-from lattice.research import AILesson, AILessonProvider
-from lattice.contracts import ScriptSection
+from lattice.research import AILesson
 
 
 class PipelineTests(unittest.TestCase):
@@ -58,16 +57,16 @@ class PipelineTests(unittest.TestCase):
             path = Path(directory) / "nested" / "history.json"
             history = LessonHistory(path)
             history.record(Topic("A New Topic!", "history"))
-            self.assertEqual(json.loads(path.read_text(encoding="utf-8")), ["a new topic"])
+            self.assertEqual(
+                json.loads(path.read_text(encoding="utf-8")), ["a new topic"]
+            )
 
     def test_invalid_claim_source_link_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "outside"):
             ResearchPacket(
                 topic=Topic("Topic", "subject"),
                 summary="Summary",
-                sources=(
-                    Source("Source", "Citation", "https://example.com", "paper"),
-                ),
+                sources=(Source("Source", "Citation", "https://example.com", "paper"),),
                 claims=(Claim("Claim", "supported", (1,)),),
                 created_at="2026-01-01T00:00:00+00:00",
             )
@@ -78,7 +77,9 @@ class PipelineTests(unittest.TestCase):
         script = build_script(self.config, research, words_per_minute=60)
         self.assertEqual(
             script.estimated_duration_seconds,
-            max(1, round(sum(len(section.text.split()) for section in script.sections))),
+            max(
+                1, round(sum(len(section.text.split()) for section in script.sections))
+            ),
         )
 
     def test_production_bundle_allocates_exact_target_duration(self) -> None:
@@ -92,8 +93,12 @@ class PipelineTests(unittest.TestCase):
 
     def test_demo_research_has_real_source_links(self) -> None:
         packet = build_demo_research_packet(Topic("Path dependence", "systems"))
-        self.assertTrue(all(source.url.startswith("https://") for source in packet.sources))
-        self.assertTrue(all(claim.evidence_level == "supported" for claim in packet.claims))
+        self.assertTrue(
+            all(source.url.startswith("https://") for source in packet.sources)
+        )
+        self.assertTrue(
+            all(claim.evidence_level == "supported" for claim in packet.claims)
+        )
 
     def test_scene_regeneration_preserves_unaffected_scene(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -123,9 +128,21 @@ class PipelineTests(unittest.TestCase):
                         for heading in config.required_sections
                     ),
                     claims=(
-                        Claim("The concept has an important mechanism.", "model-generated", ()),
-                        Claim("A second claim describes a useful tradeoff.", "model-generated", ()),
-                        Claim("A third claim explains why the example matters.", "model-generated", ()),
+                        Claim(
+                            "The concept has an important mechanism.",
+                            "model-generated",
+                            (),
+                        ),
+                        Claim(
+                            "A second claim describes a useful tradeoff.",
+                            "model-generated",
+                            (),
+                        ),
+                        Claim(
+                            "A third claim explains why the example matters.",
+                            "model-generated",
+                            (),
+                        ),
                     ),
                     uncertainty="This is recreational model-generated content.",
                     provider_model="test/fake",
@@ -141,4 +158,6 @@ class PipelineTests(unittest.TestCase):
                 bundle.draft.script.sections[0].text,
                 "Model explanation of The idea with a concrete example and mechanism.",
             )
-            self.assertEqual(bundle.draft.research.sources[0].source_type, "ai-generated")
+            self.assertEqual(
+                bundle.draft.research.sources[0].source_type, "ai-generated"
+            )

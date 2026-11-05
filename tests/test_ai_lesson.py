@@ -58,7 +58,9 @@ class AiLessonTests(unittest.TestCase):
         )
         lesson = provider.generate_lesson(Topic("Path dependence", "systems"), config)
         self.assertEqual(len(lesson.sections), len(config.required_sections))
-        self.assertEqual(lesson.to_research_packet().sources[0].source_type, "ai-generated")
+        self.assertEqual(
+            lesson.to_research_packet().sources[0].source_type, "ai-generated"
+        )
 
     def test_ollama_adapter_rejects_wrong_headings(self):
         config = load_config(
@@ -85,6 +87,4 @@ class AiLessonTests(unittest.TestCase):
         provider = create_configured_lesson_provider(config)
         self.assertIsInstance(provider, OllamaLessonProvider)
         self.assertEqual(provider.model, "qwen3:4b")
-        self.assertEqual(
-            provider.endpoint, "http://127.0.0.1:11434/api/generate"
-        )
+        self.assertEqual(provider.endpoint, "http://127.0.0.1:11434/api/generate")

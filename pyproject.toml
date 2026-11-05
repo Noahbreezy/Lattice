@@ -15,3 +15,7 @@ lattice-run-local = "lattice.cli:run_local_main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = [".*", "build", "dist", "var"]

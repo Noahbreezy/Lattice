@@ -192,8 +192,8 @@ lattice-review-server `
 ```
 
 The local FFmpeg renderer creates a real private MP4 from a successful render
-job. It creates a consistent illustrated geometric style and can use free
-local Windows SAPI narration without credentials:
+job. It creates labeled cause/mechanism/outcome diagrams and uses free local
+Windows SAPI narration by default, without credentials:
 
 ```powershell
 $env:PYTHONPATH = "src"
@@ -204,7 +204,7 @@ print("Renderer ready:", renderer.output_dir)
 '@ | python -
 ```
 
-For narrated output on Windows:
+To select the Windows voice or inject another offline provider on Windows:
 
 ```powershell
 $env:PYTHONPATH = "src"
@@ -220,8 +220,8 @@ with native alignment data can replace the current proportional timing
 fallback without changing the renderer contract.
 
 Each render also emits an `.srt` subtitle artifact derived from storyboard
-narration. A future TTS/asset adapter can use the same scene timings to add
-narration, visuals, and burned-in captions without changing the job contract.
+narration. Missing, silent, or zero-duration narration fails explicitly; there
+is no silent-audio or blank-visual fallback.
 `build_production_bundle` provides the first complete deterministic slice from
 topic selection through a duration-accurate vertical render job. The built-in
 demo research fixture covers Path dependence and Base rates for exercising the

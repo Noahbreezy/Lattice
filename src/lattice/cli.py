@@ -14,10 +14,11 @@ from pathlib import Path
 
 from .config import ConfigError, load_config
 from .contracts import Episode, EpisodeStatus
+from .evidence import build_review_evidence, write_review_evidence
 from .history import LessonHistory
 from .local_api import create_review_server
-from .pipeline import build_production_bundle
 from .persistence import EpisodeRepository
+from .pipeline import build_production_bundle
 from .production import render_episode_for_review
 from .renderer import FfmpegRenderer
 from .storage import LocalObjectStorage
@@ -68,7 +69,11 @@ def review_server_main() -> int:
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        return 0
+        pass
+    finally:
+        server.server_close()
+        repository.close()
+    return 0
 
 
 def run_local_main() -> int:
@@ -89,9 +94,12 @@ def run_local_main() -> int:
         history = LessonHistory(args.history)
         bundle = build_production_bundle(config, history, offline=True)
         topic_key = bundle.draft.topic.key
-        episode_id = "episode-" + hashlib.sha256(
-            f"{config.config_hash}:{topic_key}".encode("utf-8")
-        ).hexdigest()[:16]
+        episode_id = (
+            "episode-"
+            + hashlib.sha256(f"{config.config_hash}:{topic_key}".encode()).hexdigest()[
+                :16
+            ]
+        )
         artifact_dir = Path(args.output)
         artifact_dir.mkdir(parents=True, exist_ok=True)
         payload = _stable_value(
@@ -106,6 +114,8 @@ def run_local_main() -> int:
                 "render_job": bundle.render_job,
             }
         )
+        if not isinstance(payload, dict):
+            raise TypeError("Internal error: artifact payload must be an object.")
         artifact_path = artifact_dir / f"{episode_id}.json"
         manifest_path = artifact_dir / f"{episode_id}.manifest.json"
         serialized = json.dumps(payload, indent=2, sort_keys=True) + "\n"
@@ -115,6 +125,15 @@ def run_local_main() -> int:
             + "\n",
             encoding="utf-8",
         )
+        evidence_path = artifact_dir / f"{episode_id}.evidence.json"
+        write_review_evidence(
+            build_review_evidence(
+                bundle,
+                artifact_path=artifact_path,
+                manifest_path=manifest_path,
+            ),
+            evidence_path,
+        )
 
         repository = EpisodeRepository(args.database)
         processing = Episode(
@@ -122,19 +141,46 @@ def run_local_main() -> int:
         )
         repository.save(processing)
         rendered_dir = artifact_dir / "rendered"
+        renderer = FfmpegRenderer(rendered_dir)
         awaiting = render_episode_for_review(
             bundle,
             processing,
-            FfmpegRenderer(rendered_dir),
+            renderer,
             repository,
             LocalObjectStorage(artifact_dir / "review-media"),
             expected_duration=config.video_length_seconds,
         )
+        # Persist the materialized explanatory SVGs, not the pre-render
+        # placeholder manifest, for local inspection and review tooling.
+        if renderer.last_job is not None:
+            bundle_manifest = renderer.last_job.asset_manifest
+            payload["asset_manifest"] = _stable_value(bundle_manifest)
+            payload["render_job"] = _stable_value(renderer.last_job)
+            artifact_path.write_text(
+                json.dumps(payload, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            manifest_path.write_text(
+                json.dumps(_stable_value(bundle_manifest), indent=2, sort_keys=True)
+                + "\n",
+                encoding="utf-8",
+            )
         # Keep the manifest adjacent to the reviewable video for local consumers.
-        shutil.copyfile(manifest_path, Path(awaiting.final_video_uri).with_suffix(".manifest.json"))
+        shutil.copyfile(
+            manifest_path, Path(awaiting.final_video_uri).with_suffix(".manifest.json")
+        )
+        rendered_evidence = Path(awaiting.final_video_uri).with_suffix(".evidence.json")
+        evidence = build_review_evidence(
+            bundle,
+            artifact_path=artifact_path,
+            manifest_path=manifest_path,
+            video_path=awaiting.final_video_uri,
+        )
+        write_review_evidence(evidence, rendered_evidence)
         print(f"Episode: {awaiting.id}")
         print(f"Artifact: {artifact_path}")
         print(f"Manifest: {manifest_path}")
+        print(f"Evidence: {evidence_path}")
         print(f"Queue status: {awaiting.status.value}")
         return 0
     except (ConfigError, OSError, RuntimeError, ValueError, sqlite3.Error) as error:

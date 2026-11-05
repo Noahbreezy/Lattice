@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import sqlite3
-import hashlib
 import json
-from pathlib import Path
+import sqlite3
 from dataclasses import dataclass
+from pathlib import Path
 
 from .contracts import (
     Episode,
@@ -53,7 +52,10 @@ class EpisodeRepository:
 
     def save(self, episode: Episode, queue_priority: int | None = None) -> None:
         priority = queue_priority
-        if episode.status in (EpisodeStatus.QUEUED, EpisodeStatus.REJECTED) and priority is None:
+        if (
+            episode.status in (EpisodeStatus.QUEUED, EpisodeStatus.REJECTED)
+            and priority is None
+        ):
             priority = self._next_priority()
         self._connection.execute(
             """
@@ -282,15 +284,17 @@ class EpisodeRepository:
                     review.reviewer_id,
                     review.feedback,
                     json.dumps(review.criteria),
-                    json.dumps([
-                        {
-                            "start_seconds": marker.start_seconds,
-                            "end_seconds": marker.end_seconds,
-                            "criterion": marker.criterion,
-                            "comment": marker.comment,
-                        }
-                        for marker in review.markers
-                    ]),
+                    json.dumps(
+                        [
+                            {
+                                "start_seconds": marker.start_seconds,
+                                "end_seconds": marker.end_seconds,
+                                "criterion": marker.criterion,
+                                "comment": marker.comment,
+                            }
+                            for marker in review.markers
+                        ]
+                    ),
                     review.created_at,
                 ),
             )
@@ -345,7 +349,9 @@ class EpisodeRepository:
             for row in rows
         )
 
-    def enqueue_job(self, job_id: str, kind: str, idempotency_key: str, payload: str = "") -> Job:
+    def enqueue_job(
+        self, job_id: str, kind: str, idempotency_key: str, payload: str = ""
+    ) -> Job:
         """Insert a queued job, returning the existing job for duplicate requests."""
 
         with self._connection:
@@ -445,15 +451,20 @@ class EpisodeRepository:
 
     def audit_events(self, subject_id: str | None = None) -> tuple[dict[str, str], ...]:
         if subject_id is None:
-            rows = self._connection.execute("SELECT * FROM audit_events ORDER BY id").fetchall()
+            rows = self._connection.execute(
+                "SELECT * FROM audit_events ORDER BY id"
+            ).fetchall()
         else:
             rows = self._connection.execute(
-                "SELECT * FROM audit_events WHERE subject_id = ? ORDER BY id", (subject_id,)
+                "SELECT * FROM audit_events WHERE subject_id = ? ORDER BY id",
+                (subject_id,),
             ).fetchall()
         return tuple(dict(row) for row in rows)
 
     def _get_job(self, job_id: str) -> Job:
-        row = self._connection.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        row = self._connection.execute(
+            "SELECT * FROM jobs WHERE id = ?", (job_id,)
+        ).fetchone()
         if row is None:
             raise RuntimeError("Job disappeared after update.")
         return _job_from_row(row)
@@ -515,9 +526,12 @@ class EpisodeRepository:
             );
             """
         )
-        columns = {row["name"] for row in self._connection.execute("PRAGMA table_info(jobs)")}
+        columns = {
+            row["name"] for row in self._connection.execute("PRAGMA table_info(jobs)")
+        }
         review_columns = {
-            row["name"] for row in self._connection.execute("PRAGMA table_info(reviews)")
+            row["name"]
+            for row in self._connection.execute("PRAGMA table_info(reviews)")
         }
         if "criteria" not in review_columns:
             self._connection.execute(
@@ -528,7 +542,9 @@ class EpisodeRepository:
                 "ALTER TABLE reviews ADD COLUMN markers TEXT NOT NULL DEFAULT '[]'"
             )
         if "lease_until" not in columns:
-            self._connection.execute("ALTER TABLE jobs ADD COLUMN lease_until TEXT NOT NULL DEFAULT ''")
+            self._connection.execute(
+                "ALTER TABLE jobs ADD COLUMN lease_until TEXT NOT NULL DEFAULT ''"
+            )
             self._connection.commit()
 
     def _next_priority(self) -> int:

@@ -3,7 +3,6 @@ import unittest
 from pathlib import Path
 
 from lattice.persistence import EpisodeRepository
-from lattice.publication import LocalPublisher
 from lattice.storage import LocalObjectStorage
 
 
@@ -23,7 +22,8 @@ class OperationsTests(unittest.TestCase):
         heartbeat = repository.heartbeat_job(job.id)
         self.assertEqual(heartbeat.status, "running")
         repository._connection.execute(
-            "UPDATE jobs SET lease_until = '2000-01-01T00:00:00Z' WHERE id = ?", (job.id,)
+            "UPDATE jobs SET lease_until = '2000-01-01T00:00:00Z' WHERE id = ?",
+            (job.id,),
         )
         recovered = repository.recover_stale_jobs()
         self.assertEqual(recovered[0].status, "queued")

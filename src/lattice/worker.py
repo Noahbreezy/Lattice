@@ -33,7 +33,9 @@ class LocalWorker:
             return self._fail(job, f"No handler registered for {job.kind}.")
         try:
             handler(job)
-        except Exception as exc:
+        # Handlers are an extension boundary: any failure must be persisted so
+        # the durable queue can retry it instead of losing the claimed job.
+        except Exception as exc:  # noqa: BLE001
             return self._fail(job, str(exc))
         completed = self.repository.complete_job(job.id)
         self.repository.record_audit("job.succeeded", job.id, job.kind)
@@ -41,7 +43,9 @@ class LocalWorker:
 
     def _fail(self, job: Job, error: str) -> Job:
         retry = job.attempts < self.max_attempts
-        failed = self.repository.fail_job(job.id, error or "Unknown worker failure.", retry)
+        failed = self.repository.fail_job(
+            job.id, error or "Unknown worker failure.", retry
+        )
         self.repository.record_audit(
             "job.retry" if retry else "job.failed",
             job.id,
