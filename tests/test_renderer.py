@@ -6,6 +6,8 @@ import wave
 from pathlib import Path
 
 from lattice.config import load_config
+from lattice.contracts import Topic
+from lattice.media_quality import check_media, measure_animation
 from lattice.pipeline import (
     build_asset_manifest,
     build_research_packet,
@@ -14,8 +16,6 @@ from lattice.pipeline import (
     create_render_job,
 )
 from lattice.renderer import FfmpegRenderer
-from lattice.contracts import RenderJobStatus, Topic
-from lattice.media_quality import check_media, measure_animation
 from lattice.tts import Narration, _proportional_timings
 
 
@@ -29,20 +29,41 @@ class FixtureTts:
             audio.writeframes(b"\x01\x00" * 8000 * 30)
         duration = 30.0
         words = text.split()
-        return Narration(str(path), duration, _proportional_timings(words, duration), "fixture")
+        return Narration(
+            str(path), duration, _proportional_timings(words, duration), "fixture"
+        )
 
 
-@unittest.skipUnless(shutil.which("ffmpeg"), "FFmpeg is required for local renderer tests.")
+@unittest.skipUnless(
+    shutil.which("ffmpeg"), "FFmpeg is required for local renderer tests."
+)
 class RendererTests(unittest.TestCase):
     def test_animation_metric_is_bounded_and_distinguishes_motion(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             static = Path(directory) / "static.mp4"
             moving = Path(directory) / "moving.mp4"
-            for output, source in ((static, "color=c=black:s=64x64:r=2"), (moving, "testsrc=s=64x64:r=2")):
+            for output, source in (
+                (static, "color=c=black:s=64x64:r=2"),
+                (moving, "testsrc=s=64x64:r=2"),
+            ):
                 subprocess.run(
-                    ["ffmpeg", "-y", "-f", "lavfi", "-i", source, "-t", "2",
-                     "-c:v", "libx264", "-pix_fmt", "yuv420p", str(output)],
-                    check=True, capture_output=True,
+                    [
+                        "ffmpeg",
+                        "-y",
+                        "-f",
+                        "lavfi",
+                        "-i",
+                        source,
+                        "-t",
+                        "2",
+                        "-c:v",
+                        "libx264",
+                        "-pix_fmt",
+                        "yuv420p",
+                        str(output),
+                    ],
+                    check=True,
+                    capture_output=True,
                 )
             static_metric = measure_animation(static)
             moving_metric = measure_animation(moving)
@@ -64,5 +85,7 @@ class RendererTests(unittest.TestCase):
             self.assertTrue(Path(video.uri).exists())
             self.assertGreater(Path(video.uri).stat().st_size, 0)
             self.assertEqual(len(tuple(Path(directory).glob("*.srt"))), 1)
-            report = check_media(video.uri, expected_duration=config.video_length_seconds)
+            report = check_media(
+                video.uri, expected_duration=config.video_length_seconds
+            )
             self.assertTrue(report.passed, report.issues)

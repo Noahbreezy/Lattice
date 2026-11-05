@@ -9,10 +9,10 @@ import mimetypes
 import os
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse
 from pathlib import Path
+from urllib.parse import urlparse
 
-from .contracts import ReviewDecision, ReviewMarker
+from .contracts import Episode, Review, ReviewDecision, ReviewMarker
 from .persistence import EpisodeRepository
 
 
@@ -23,7 +23,7 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
     review_token: str = ""
     media_root: Path | None = None
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         if not self._authorized():
             return
         path = urlparse(self.path).path
@@ -45,7 +45,10 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
         if path == "/review-queue":
             self._write(
                 HTTPStatus.OK,
-                [self._episode_json(item) for item in self.repository.list_review_queue()],
+                [
+                    self._episode_json(item)
+                    for item in self.repository.list_review_queue()
+                ],
             )
             return
         if path.startswith("/episodes/"):
@@ -56,7 +59,10 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
                 else:
                     self._write(
                         HTTPStatus.OK,
-                        [self._review_json(review) for review in self.repository.reviews_for(episode_id)],
+                        [
+                            self._review_json(review)
+                            for review in self.repository.reviews_for(episode_id)
+                        ],
                     )
                 return
             episode = self.repository.get(path.removeprefix("/episodes/"))
@@ -67,7 +73,7 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
             return
         self._write(HTTPStatus.NOT_FOUND, {"error": "Route not found."})
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         if not self._authorized():
             return
         path = urlparse(self.path).path
@@ -86,10 +92,10 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
             feedback = str(payload.get("feedback", ""))
             criteria_value = payload.get("criteria", [])
             if not isinstance(criteria_value, list):
-                raise ValueError("criteria must be an array.")
+                raise TypeError("criteria must be an array.")
             markers_value = payload.get("markers", [])
             if not isinstance(markers_value, list):
-                raise ValueError("markers must be an array.")
+                raise TypeError("markers must be an array.")
             markers = tuple(
                 ReviewMarker(
                     start_seconds=int(marker["start_seconds"]),
@@ -100,10 +106,14 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
                 for marker in markers_value
             )
             updated, review = self.repository.decide(
-                episode, reviewer_id, decision, feedback,
-                tuple(str(item) for item in criteria_value), markers,
+                episode,
+                reviewer_id,
+                decision,
+                feedback,
+                tuple(str(item) for item in criteria_value),
+                markers,
             )
-        except (KeyError, ValueError, json.JSONDecodeError) as exc:
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             self._write(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
             return
         self._write(
@@ -154,7 +164,7 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
             raise ValueError("Request body is too large.")
         value = json.loads(self.rfile.read(length))
         if not isinstance(value, dict):
-            raise ValueError("Request body must be an object.")
+            raise TypeError("Request body must be an object.")
         return value
 
     def _write(self, status: HTTPStatus, value: object) -> None:
@@ -175,7 +185,9 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
 
     def _serve_media(self, episode_id: str) -> None:
         if self.media_root is None:
-            self._write(HTTPStatus.NOT_FOUND, {"error": "Media serving is not configured."})
+            self._write(
+                HTTPStatus.NOT_FOUND, {"error": "Media serving is not configured."}
+            )
             return
         episode = self.repository.get(episode_id)
         if episode is None or not episode.final_video_uri:
@@ -189,21 +201,26 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
             root = self.media_root.resolve()
             resolved.relative_to(root)
         except ValueError:
-            self._write(HTTPStatus.FORBIDDEN, {"error": "Media path is outside storage."})
+            self._write(
+                HTTPStatus.FORBIDDEN, {"error": "Media path is outside storage."}
+            )
             return
         if not resolved.is_file():
             self._write(HTTPStatus.NOT_FOUND, {"error": "Media not found."})
             return
         body = resolved.read_bytes()
         self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", mimetypes.guess_type(str(resolved))[0] or "application/octet-stream")
+        self.send_header(
+            "Content-Type",
+            mimetypes.guess_type(str(resolved))[0] or "application/octet-stream",
+        )
         self.send_header("Content-Length", str(len(body)))
         self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(body)
 
     @staticmethod
-    def _episode_json(episode: object) -> dict[str, object]:
+    def _episode_json(episode: Episode) -> dict[str, object]:
         return {
             "id": episode.id,
             "topic": episode.topic.title,
@@ -215,7 +232,7 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
         }
 
     @staticmethod
-    def _review_json(review: object) -> dict[str, object]:
+    def _review_json(review: Review) -> dict[str, object]:
         return {
             "episode_id": review.episode_id,
             "decision": review.decision.value,
@@ -247,16 +264,23 @@ def create_review_server(
 ) -> ThreadingHTTPServer:
     """Create a local review server with safe binding defaults."""
 
-    token = review_token if review_token is not None else os.getenv(
-        "LATTICE_REVIEW_TOKEN", ""
+    token = (
+        review_token
+        if review_token is not None
+        else os.getenv("LATTICE_REVIEW_TOKEN", "")
     )
     if host not in {"127.0.0.1", "::1", "localhost"} and not token:
         raise ValueError("A review token is required when binding beyond localhost.")
-    handler = type("ConfiguredReviewApiHandler", (ReviewApiHandler,), {})
-    handler.repository = repository
-    handler.review_token = token
-    handler.media_root = Path(media_root) if media_root is not None else None
-    return ThreadingHTTPServer((host, port), handler)
+
+    class ConfiguredReviewApiHandler(ReviewApiHandler):
+        pass
+
+    ConfiguredReviewApiHandler.repository = repository
+    ConfiguredReviewApiHandler.review_token = token
+    ConfiguredReviewApiHandler.media_root = (
+        Path(media_root) if media_root is not None else None
+    )
+    return ThreadingHTTPServer((host, port), ConfiguredReviewApiHandler)
 
 
 _REVIEW_APP = """<!doctype html>

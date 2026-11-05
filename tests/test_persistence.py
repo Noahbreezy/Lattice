@@ -27,9 +27,7 @@ class EpisodeRepositoryTests(unittest.TestCase):
             repository.close()
 
     def test_claiming_queue_is_persistent_and_atomic(self) -> None:
-        self.repository.save(
-            Episode("ordinary", self.topic, EpisodeStatus.QUEUED, 1)
-        )
+        self.repository.save(Episode("ordinary", self.topic, EpisodeStatus.QUEUED, 1))
         rejected = Episode(
             "rejected", self.topic, EpisodeStatus.REJECTED, 2, "private://old.mp4"
         )
@@ -108,7 +106,9 @@ class EpisodeRepositoryTests(unittest.TestCase):
 
     def test_jobs_are_idempotent_and_retryable(self) -> None:
         first = self.repository.enqueue_job("job-1", "render", "episode-1:v1", "{}")
-        duplicate = self.repository.enqueue_job("job-duplicate", "render", "episode-1:v1", "{}")
+        duplicate = self.repository.enqueue_job(
+            "job-duplicate", "render", "episode-1:v1", "{}"
+        )
         self.assertEqual(first.id, duplicate.id)
         claimed = self.repository.claim_job("render")
         self.assertEqual(claimed.status, "running")
@@ -123,7 +123,9 @@ class EpisodeRepositoryTests(unittest.TestCase):
     def test_failed_job_can_be_dead_lettered(self) -> None:
         self.repository.enqueue_job("job-1", "research", "episode-1:v1")
         claimed = self.repository.claim_job()
-        failed = self.repository.fail_job(claimed.id, "invalid source response", retry=False)
+        failed = self.repository.fail_job(
+            claimed.id, "invalid source response", retry=False
+        )
         self.assertEqual(failed.status, "failed")
         with self.assertRaises(LookupError):
             self.repository.claim_job()

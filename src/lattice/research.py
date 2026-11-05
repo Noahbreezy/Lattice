@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Protocol
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote
-from urllib.error import URLError, HTTPError
 from urllib.request import Request, urlopen
-from typing import Protocol, TYPE_CHECKING
 
 from .contracts import Claim, ResearchPacket, ScriptSection, Source, Topic, now_utc
 
@@ -61,7 +61,7 @@ class AILesson:
 class AILessonProvider(Protocol):
     """Capability for generating a complete lesson from project policy."""
 
-    def generate_lesson(self, topic: Topic, config: "ProjectConfig") -> AILesson:
+    def generate_lesson(self, topic: Topic, config: ProjectConfig) -> AILesson:
         """Generate structured lesson content without human intervention."""
 
 
@@ -82,7 +82,7 @@ class OllamaLessonProvider:
         self.timeout = timeout
         self.opener = opener
 
-    def generate_lesson(self, topic: Topic, config: "ProjectConfig") -> AILesson:
+    def generate_lesson(self, topic: Topic, config: ProjectConfig) -> AILesson:
         required = list(config.required_sections)
         prompt = _lesson_prompt(topic, config)
         request = Request(
@@ -103,7 +103,14 @@ class OllamaLessonProvider:
             with self.opener(request, timeout=self.timeout) as response:
                 outer = json.loads(response.read().decode("utf-8"))
             payload = json.loads(str(outer["response"]))
-        except (HTTPError, URLError, TimeoutError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        except (
+            HTTPError,
+            URLError,
+            TimeoutError,
+            KeyError,
+            TypeError,
+            json.JSONDecodeError,
+        ) as exc:
             raise RuntimeError(
                 f"Ollama lesson generation failed for model '{self.model}': {exc}"
             ) from exc
@@ -132,17 +139,21 @@ class OllamaLessonProvider:
                 provider_model=f"ollama/{self.model}",
             )
         except (KeyError, TypeError, ValueError) as exc:
-            raise RuntimeError(f"Ollama returned an invalid lesson shape: {exc}") from exc
+            raise RuntimeError(
+                f"Ollama returned an invalid lesson shape: {exc}"
+            ) from exc
         from .quality import require_lesson_quality
 
         try:
             require_lesson_quality(config, lesson)
         except ValueError as exc:
-            raise RuntimeError(f"Ollama returned a lesson that failed quality checks: {exc}") from exc
+            raise RuntimeError(
+                f"Ollama returned a lesson that failed quality checks: {exc}"
+            ) from exc
         return lesson
 
 
-def create_configured_lesson_provider(config: "ProjectConfig") -> AILessonProvider:
+def create_configured_lesson_provider(config: ProjectConfig) -> AILessonProvider:
     """Create the configured lesson provider for production execution."""
 
     tool = next(
@@ -163,7 +174,7 @@ def create_configured_lesson_provider(config: "ProjectConfig") -> AILessonProvid
     return OllamaLessonProvider(model=model, endpoint=endpoint)
 
 
-def _lesson_prompt(topic: Topic, config: "ProjectConfig") -> str:
+def _lesson_prompt(topic: Topic, config: ProjectConfig) -> str:
     sections = "\n".join(f"- {heading}" for heading in config.required_sections)
     rules = "\n".join(f"- {rule}" for rule in config.learning_rules)
     return f"""Create a recreational educational lesson about "{topic.title}" ({topic.subject_area}).
@@ -191,21 +202,30 @@ class WikipediaResearchProvider:
         self.timeout = timeout
 
     def research(self, topic: Topic) -> ResearchPacket:
-        url = (
-            "https://en.wikipedia.org/api/rest_v1/page/summary/"
-            + quote(topic.title.replace(" ", "_"))
+        url = "https://en.wikipedia.org/api/rest_v1/page/summary/" + quote(
+            topic.title.replace(" ", "_")
         )
         request = Request(url, headers={"User-Agent": "Lattice/0.1 research client"})
         try:
             with self.opener(request, timeout=self.timeout) as response:
                 payload = json.loads(response.read().decode("utf-8"))
-        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, KeyError) as exc:
+        except (
+            HTTPError,
+            URLError,
+            TimeoutError,
+            json.JSONDecodeError,
+            KeyError,
+        ) as exc:
             raise RuntimeError(f"Research provider request failed: {exc}") from exc
         summary = str(payload.get("extract", "")).strip()
-        page_url = str(payload.get("content_urls", {}).get("desktop", {}).get("page", ""))
+        page_url = str(
+            payload.get("content_urls", {}).get("desktop", {}).get("page", "")
+        )
         if not summary or not page_url:
             raise ValueError(f"No credible source summary found for '{topic.title}'.")
-        source = Source(topic.title, "Wikipedia article summary", page_url, "encyclopedia")
+        source = Source(
+            topic.title, "Wikipedia article summary", page_url, "encyclopedia"
+        )
         claim = Claim(
             statement=summary,
             evidence_level="supported",

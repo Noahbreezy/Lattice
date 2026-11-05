@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -35,9 +35,7 @@ class RetentionSettings:
             if limit is not None and (
                 not isinstance(limit, int) or isinstance(limit, bool) or limit < 0
             ):
-                raise ConfigError(
-                    f"{field} must be a non-negative integer or null."
-                )
+                raise ConfigError(f"{field} must be a non-negative integer or null.")
 
 
 @dataclass(frozen=True)
@@ -95,7 +93,7 @@ class ProjectConfig:
         return "1"
 
     @classmethod
-    def from_mapping(cls, raw: MappingLike) -> "ProjectConfig":
+    def from_mapping(cls, raw: MappingLike) -> ProjectConfig:
         if not isinstance(raw, dict):
             raise ConfigError("The project configuration must be a JSON object.")
 

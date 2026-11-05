@@ -4,6 +4,7 @@ import wave
 from pathlib import Path
 
 from lattice.contracts import Storyboard, StoryboardScene
+from lattice.renderer import FfmpegRenderer
 from lattice.tts import (
     Narration,
     WindowsSpeechTts,
@@ -11,7 +12,6 @@ from lattice.tts import (
     reconcile_storyboard_timing,
     validate_narration,
 )
-from lattice.renderer import FfmpegRenderer
 
 
 class TtsTests(unittest.TestCase):
@@ -42,12 +42,16 @@ class TtsTests(unittest.TestCase):
         self.assertEqual(reconciled.version, storyboard.version + 1)
 
     def test_windows_tts_rejects_empty_text_explicitly(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaisesRegex(ValueError, "empty"):
-                WindowsSpeechTts().synthesize("", Path(directory) / "speech.wav")
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            self.assertRaisesRegex(ValueError, "empty"),
+        ):
+            WindowsSpeechTts().synthesize("", Path(directory) / "speech.wav")
 
     def test_renderer_defaults_to_windows_offline_tts(self) -> None:
-        self.assertIsInstance(FfmpegRenderer("var/test-output").tts_provider, WindowsSpeechTts)
+        self.assertIsInstance(
+            FfmpegRenderer("var/test-output").tts_provider, WindowsSpeechTts
+        )
 
     def test_silent_wav_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -57,6 +61,8 @@ class TtsTests(unittest.TestCase):
                 audio.setsampwidth(2)
                 audio.setframerate(8000)
                 audio.writeframes(b"\x00\x00" * 8000)
-            narration = Narration(str(path), 1.0, _proportional_timings(["hello"], 1.0), "test")
+            narration = Narration(
+                str(path), 1.0, _proportional_timings(["hello"], 1.0), "test"
+            )
             with self.assertRaisesRegex(RuntimeError, "silent"):
                 validate_narration(narration)

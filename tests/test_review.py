@@ -1,6 +1,12 @@
 import unittest
 
-from lattice.contracts import Episode, EpisodeStatus, ReviewDecision, ReviewMarker, Topic
+from lattice.contracts import (
+    Episode,
+    EpisodeStatus,
+    ReviewDecision,
+    ReviewMarker,
+    Topic,
+)
 from lattice.review import ReviewQueue
 
 
@@ -12,11 +18,18 @@ class ReviewQueueTests(unittest.TestCase):
     def test_rejected_episode_is_requeued_before_unprocessed_work(self) -> None:
         untouched = Episode("untouched", self.topic, EpisodeStatus.QUEUED, 1)
         rejected = Episode(
-            "rejected", self.topic, EpisodeStatus.AWAITING_REVIEW, 1, "s3://final/rejected.mp4"
+            "rejected",
+            self.topic,
+            EpisodeStatus.AWAITING_REVIEW,
+            1,
+            "s3://final/rejected.mp4",
         )
         self.queue.enqueue(untouched)
         updated, review = self.queue.decide(
-            rejected, "owner", ReviewDecision.REJECT, "The opening needs a clearer example."
+            rejected,
+            "owner",
+            ReviewDecision.REJECT,
+            "The opening needs a clearer example.",
         )
         self.assertEqual(updated.status, EpisodeStatus.REJECTED)
         self.assertEqual(review.feedback, "The opening needs a clearer example.")
@@ -25,14 +38,20 @@ class ReviewQueueTests(unittest.TestCase):
 
     def test_approval_preserves_video_for_later_upload(self) -> None:
         episode = Episode(
-            "ready", self.topic, EpisodeStatus.AWAITING_REVIEW, 1, "s3://final/ready.mp4"
+            "ready",
+            self.topic,
+            EpisodeStatus.AWAITING_REVIEW,
+            1,
+            "s3://final/ready.mp4",
         )
         updated, _ = self.queue.decide(episode, "owner", ReviewDecision.APPROVE)
         self.assertEqual(updated.status, EpisodeStatus.APPROVED)
         self.assertEqual(updated.final_video_uri, "s3://final/ready.mp4")
 
     def test_rejection_requires_feedback(self) -> None:
-        episode = Episode("needs-feedback", self.topic, EpisodeStatus.AWAITING_REVIEW, 1, "s3://x")
+        episode = Episode(
+            "needs-feedback", self.topic, EpisodeStatus.AWAITING_REVIEW, 1, "s3://x"
+        )
         with self.assertRaisesRegex(ValueError, "feedback"):
             self.queue.decide(episode, "owner", ReviewDecision.REJECT)
 
@@ -42,13 +61,17 @@ class ReviewQueueTests(unittest.TestCase):
             self.queue.decide(episode, "owner", ReviewDecision.APPROVE)
 
     def test_rejection_can_be_structured_with_timestamped_feedback(self) -> None:
-        episode = Episode("marked", self.topic, EpisodeStatus.AWAITING_REVIEW, 1, "s3://x")
+        episode = Episode(
+            "marked", self.topic, EpisodeStatus.AWAITING_REVIEW, 1, "s3://x"
+        )
         _, review = self.queue.decide(
             episode,
             "owner",
             ReviewDecision.REJECT,
             criteria=("visual_clarity",),
-            markers=(ReviewMarker(5, 12, "visual_clarity", "Show the railway tracks."),),
+            markers=(
+                ReviewMarker(5, 12, "visual_clarity", "Show the railway tracks."),
+            ),
         )
         self.assertEqual(review.criteria, ("visual_clarity",))
         self.assertEqual(review.markers[0].start_seconds, 5)

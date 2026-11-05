@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import math
 import subprocess
 import tempfile
-import math
 from dataclasses import replace
 from pathlib import Path
+
+from .contracts import PublishedVideo, RenderJob, RenderJobStatus
+from .pipeline import publish_video
 from .tts import (
     Narration,
     TtsProvider,
@@ -14,9 +17,6 @@ from .tts import (
     reconcile_storyboard_timing,
     validate_narration,
 )
-
-from .contracts import PublishedVideo, RenderJob, RenderJobStatus
-from .pipeline import publish_video
 from .visuals import IllustratedVisualProvider
 
 
@@ -34,7 +34,7 @@ class FfmpegRenderer:
         # Narration is mandatory for the local MVP. Callers may inject a local
         # provider for tests or an installed offline engine.
         self.tts_provider = tts_provider or WindowsSpeechTts()
-        self.last_job = None
+        self.last_job: RenderJob | None = None
 
     def render(self, job: RenderJob) -> PublishedVideo:
         if job.status == RenderJobStatus.QUEUED:
@@ -45,7 +45,9 @@ class FfmpegRenderer:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         output = self.output_dir / f"{job.job_id.replace(':', '_')}.mp4"
         subtitle_path = self.output_dir / f"{job.job_id.replace(':', '_')}.srt"
-        duration = max(1, sum(scene.duration_seconds for scene in job.storyboard.scenes))
+        duration = max(
+            1, sum(scene.duration_seconds for scene in job.storyboard.scenes)
+        )
         with tempfile.TemporaryDirectory() as directory:
             job = _materialize_assets(
                 job, self.output_dir / "assets" / job.job_id.replace(":", "_")
@@ -63,7 +65,11 @@ class FfmpegRenderer:
                 )
             subtitle_path.write_text(_srt(job, narration), encoding="utf-8")
             command = _render_command(
-                self.ffmpeg, job, output, duration, narration.audio_uri if narration else None
+                self.ffmpeg,
+                job,
+                output,
+                duration,
+                narration.audio_uri if narration else None,
             )
             try:
                 completed = subprocess.run(
@@ -72,7 +78,9 @@ class FfmpegRenderer:
             except OSError as exc:
                 raise RuntimeError(f"Could not start FFmpeg: {exc}") from exc
             if completed.returncode != 0:
-                detail = completed.stderr.strip().splitlines()[-1:] or ["unknown FFmpeg error"]
+                detail = completed.stderr.strip().splitlines()[-1:] or [
+                    "unknown FFmpeg error"
+                ]
                 raise RuntimeError(f"FFmpeg render failed: {detail[0]}")
             self.last_job = job
         return publish_video(job, str(output))
@@ -82,6 +90,7 @@ class FfmpegRenderer:
         return validate_narration(
             self.tts_provider.synthesize(text, directory / "narration.wav")
         )
+
 
 def _render_command(
     ffmpeg: str,
@@ -98,16 +107,16 @@ def _render_command(
         if supports_svg or not asset.uri.endswith(".txt"):
             inputs.extend(["-loop", "1", "-framerate", "30", "-i", asset.uri])
         else:
-            inputs.extend(
-                ["-f", "lavfi", "-i", "color=c=0x172554:s=1080x1920:r=30"]
-            )
+            inputs.extend(["-f", "lavfi", "-i", "color=c=0x172554:s=1080x1920:r=30"])
         label = f"[v{index}]"
         labels.append(label)
     if audio_uri:
         inputs.extend(["-i", audio_uri])
         audio_label = f"{len(job.storyboard.scenes)}:a"
     else:
-        inputs.extend(["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"])
+        inputs.extend(
+            ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"]
+        )
         audio_label = f"{len(job.storyboard.scenes)}:a"
     filters = []
     for index, _scene in enumerate(job.storyboard.scenes):
@@ -132,10 +141,23 @@ def _render_command(
         )
     filters.append("".join(labels) + f"concat=n={len(labels)}:v=1:a=0[vout]")
     return inputs + [
-        "-filter_complex", ";".join(filters),
-        "-map", "[vout]", "-map", f"{audio_label}",
-        "-t", str(duration), "-c:v", "libx264", "-pix_fmt", "yuv420p",
-        "-af", "apad", "-c:a", "aac", str(output),
+        "-filter_complex",
+        ";".join(filters),
+        "-map",
+        "[vout]",
+        "-map",
+        f"{audio_label}",
+        "-t",
+        str(duration),
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-af",
+        "apad",
+        "-c:a",
+        "aac",
+        str(output),
     ]
 
 
@@ -180,9 +202,13 @@ def _materialize_assets(job: RenderJob, directory: Path) -> RenderJob:
                 "OUTCOME: Apply the idea to the example.",
                 encoding="utf-8",
             )
-            fallback_assets.append(replace(asset, asset_type="text-illustration", uri=str(fallback)))
+            fallback_assets.append(
+                replace(asset, asset_type="text-illustration", uri=str(fallback))
+            )
         assets = fallback_assets
-    return replace(job, asset_manifest=replace(job.asset_manifest, assets=tuple(assets)))
+    return replace(
+        job, asset_manifest=replace(job.asset_manifest, assets=tuple(assets))
+    )
 
 
 def _srt(job: RenderJob, narration: Narration | None = None) -> str:
@@ -191,9 +217,7 @@ def _srt(job: RenderJob, narration: Narration | None = None) -> str:
     for index, scene in enumerate(job.storyboard.scenes, start=1):
         start = _timestamp(elapsed)
         elapsed += scene.duration_seconds
-        lines.append(
-            f"{index}\n{start} --> {_timestamp(elapsed)}\n{scene.narration}\n"
-        )
+        lines.append(f"{index}\n{start} --> {_timestamp(elapsed)}\n{scene.narration}\n")
     return "\n".join(lines)
 
 

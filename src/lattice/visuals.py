@@ -29,11 +29,15 @@ def validate_svg(path: str | Path) -> None:
         raise ValueError(f"SVG asset root element must be <svg>: {asset}")
     if root.attrib.get("width") != "1080" or root.attrib.get("height") != "1920":
         raise ValueError(f"SVG asset must be 1080x1920: {asset}")
-    if not any(element.tag.rsplit("}", 1)[-1] == "text" and (element.text or "").strip()
-               for element in root.iter()):
+    if not any(
+        element.tag.rsplit("}", 1)[-1] == "text" and (element.text or "").strip()
+        for element in root.iter()
+    ):
         raise ValueError(f"SVG asset must contain readable text: {asset}")
-    if any(element.tag.rsplit("}", 1)[-1] in {"script", "foreignObject"}
-           for element in root.iter()):
+    if any(
+        element.tag.rsplit("}", 1)[-1] in {"script", "foreignObject"}
+        for element in root.iter()
+    ):
         raise ValueError(f"SVG asset contains unsupported executable content: {asset}")
 
 
@@ -71,7 +75,9 @@ class IllustratedVisualProvider:
 </svg>"""
         path.write_text(svg, encoding="utf-8")
         validate_svg(path)
-        return AssetReference(scene.scene_id + "-illustration", "svg-illustration", str(path))
+        return AssetReference(
+            scene.scene_id + "-illustration", "svg-illustration", str(path)
+        )
 
 
 def _topic_from_direction(direction: str) -> str:

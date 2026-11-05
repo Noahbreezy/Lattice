@@ -33,20 +33,22 @@ class LocalCliTests(unittest.TestCase):
             self.assertEqual(episodes[0].status, EpisodeStatus.AWAITING_REVIEW)
             self.assertTrue(Path(episodes[0].final_video_uri).is_file())
             self.assertTrue(
-                Path(episodes[0].final_video_uri).with_name(
-                    Path(episodes[0].final_video_uri).stem + ".manifest.json"
-                ).is_file()
+                Path(episodes[0].final_video_uri)
+                .with_name(Path(episodes[0].final_video_uri).stem + ".manifest.json")
+                .is_file()
             )
             repository.close()
 
     def test_local_run_reports_invalid_config(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            with patch.object(
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.object(
                 sys,
                 "argv",
                 ["lattice-run-local", str(Path(directory) / "missing.json")],
-            ):
-                self.assertEqual(run_local_main(), 1)
+            ),
+        ):
+            self.assertEqual(run_local_main(), 1)
 
 
 if __name__ == "__main__":

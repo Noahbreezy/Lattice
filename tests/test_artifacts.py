@@ -1,6 +1,6 @@
-import unittest
-import tempfile
 import hashlib
+import tempfile
+import unittest
 from pathlib import Path
 
 from lattice.config import ConfigError, load_config
@@ -12,6 +12,7 @@ from lattice.contracts import (
     RenderJobStatus,
     Topic,
 )
+from lattice.evidence import build_review_evidence
 from lattice.pipeline import (
     build_asset_manifest,
     build_research_packet,
@@ -20,7 +21,6 @@ from lattice.pipeline import (
     create_render_job,
     publish_video,
 )
-from lattice.evidence import build_review_evidence
 
 
 class ArtifactContractTests(unittest.TestCase):
@@ -53,8 +53,10 @@ class ArtifactContractTests(unittest.TestCase):
         succeeded = job.transition_to(RenderJobStatus.RUNNING).transition_to(
             RenderJobStatus.SUCCEEDED
         )
-        self.assertEqual(publish_video(succeeded, "private://video.mp4").approval_state,
-                         ApprovalState.PENDING)
+        self.assertEqual(
+            publish_video(succeeded, "private://video.mp4").approval_state,
+            ApprovalState.PENDING,
+        )
 
     def test_published_video_requires_successful_render(self) -> None:
         job = create_render_job(self.storyboard, self.manifest)
@@ -98,13 +100,20 @@ class ArtifactContractTests(unittest.TestCase):
                 hashlib.sha256(video.read_bytes()).hexdigest(),
             )
             self.assertTrue(evidence["srt"]["timing_valid"])
-            self.assertTrue(all(item["narration_matches_srt"] for item in evidence["srt"]["scene_mappings"]))
+            self.assertTrue(
+                all(
+                    item["narration_matches_srt"]
+                    for item in evidence["srt"]["scene_mappings"]
+                )
+            )
 
     def _bundle(self):
-        from lattice.pipeline import ProductionBundle, EpisodeDraft
-        from lattice.pipeline import create_render_job
+        from lattice.pipeline import EpisodeDraft, ProductionBundle, create_render_job
+
         return ProductionBundle(
-            EpisodeDraft(self.script.topic, build_research_packet(self.script.topic), self.script),
+            EpisodeDraft(
+                self.script.topic, build_research_packet(self.script.topic), self.script
+            ),
             self.storyboard,
             self.manifest,
             create_render_job(self.storyboard, self.manifest),

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Protocol
 
 from .config import ProjectConfig
@@ -102,6 +102,8 @@ def build_demo_research_packet(topic: Topic) -> ResearchPacket:
     """
 
     key = topic.key
+    sources: tuple[Source, ...]
+    claims: tuple[Claim, ...]
     if "path dependence" in key:
         sources = (
             Source(
@@ -168,6 +170,76 @@ def build_demo_research_packet(topic: Topic) -> ResearchPacket:
             "A base rate is the background frequency of an event before new evidence "
             "arrives. Bayes' rule combines that starting probability with the reliability "
             "of the evidence, which is why rare-event detectors can generate many false alarms."
+        )
+    elif "maps change what governments can do" in key:
+        sources = (
+            Source(
+                "Land administration and management",
+                "World Bank, Land Administration and Management.",
+                "https://www.worldbank.org/en/topic/land/brief/land-administration-and-management",
+                "international-development",
+            ),
+            Source(
+                "John Snow and the Broad Street pump",
+                "UCLA Fielding School of Public Health, The John Snow Archive and Research Companion.",
+                "https://www.ph.ucla.edu/epi/snow.html",
+                "public-health-history",
+            ),
+            Source(
+                "Cholera: history and transmission",
+                "Centers for Disease Control and Prevention, Cholera.",
+                "https://www.cdc.gov/cholera/about/index.html",
+                "public-health",
+            ),
+            Source(
+                "The map that stopped an epidemic",
+                "Wellcome Collection, John Snow's cholera map (1855).",
+                "https://wellcomecollection.org/works/azf2xq3j",
+                "museum-collection",
+            ),
+        )
+        claims = (
+            Claim(
+                "A map is a selective model that turns places, boundaries, and attributes into information that institutions can compare and act on.",
+                "supported",
+                (0, 1),
+                "Maps simplify; what is omitted or misclassified can matter politically.",
+            ),
+            Claim(
+                "Cadastral and administrative records can link land or households to locations, making assessment, service planning, and infrastructure coordination more practicable.",
+                "supported",
+                (0,),
+                "The capacity gained depends on accuracy, legal authority, funding, and whether people are represented.",
+            ),
+            Claim(
+                "John Snow's 1854 map plotted cholera deaths around London's Broad Street pump and helped focus attention on a shared water source.",
+                "supported",
+                (1, 3),
+                "The map was influential evidence, not by itself a complete proof of germ transmission; later epidemiology supplied stronger causal understanding.",
+            ),
+            Claim(
+                "Cholera is caused by infection with Vibrio cholerae, commonly through contaminated food or water.",
+                "consensus",
+                (2,),
+            ),
+            Claim(
+                "Administrative maps can also erase or localize people when borders, categories, or unmapped settlements are treated as the whole reality.",
+                "supported",
+                (0,),
+                "The social consequences vary by context; a map's effects are not automatically beneficial or harmful.",
+            ),
+            Claim(
+                "The same data-to-decision pipeline resembles a database query: a schema determines what can be counted, joined, and prioritized.",
+                "analogy",
+                (0,),
+                "This is a conceptual connection, not a claim that government mapping systems are literally databases.",
+            ),
+        )
+        summary = (
+            "Maps change government capacity by making territory legible: they assign observations "
+            "to locations, boundaries, and categories that an institution can count, compare, and "
+            "revisit. That supports cadastral taxation, infrastructure planning, policing, and "
+            "public-health response—but only for the slice of reality the map records."
         )
     else:
         return build_research_packet(topic)
@@ -286,7 +358,9 @@ def build_asset_manifest(
 
     if output_dir is not None:
         provider = visual_provider or IllustratedVisualProvider()
-        assets = tuple(provider.create(scene, output_dir) for scene in storyboard.scenes)
+        assets = tuple(
+            provider.create(scene, output_dir) for scene in storyboard.scenes
+        )
     else:
         assets = tuple(
             AssetReference(
@@ -310,11 +384,15 @@ def build_asset_manifest(
     return AssetManifest(assets=assets, provenance=provenance)
 
 
-def create_render_job(storyboard: Storyboard, asset_manifest: AssetManifest) -> RenderJob:
+def create_render_job(
+    storyboard: Storyboard, asset_manifest: AssetManifest
+) -> RenderJob:
     """Create a queued render job for a provider adapter."""
 
     storyboard_id = storyboard.provenance.artifact_id if storyboard.provenance else ""
-    assets_id = asset_manifest.provenance.artifact_id if asset_manifest.provenance else ""
+    assets_id = (
+        asset_manifest.provenance.artifact_id if asset_manifest.provenance else ""
+    )
     inherited = storyboard.provenance or asset_manifest.provenance
     job_id = f"render:{storyboard_id or 'storyboard'}:v1"
     provenance = ArtifactProvenance.for_content(
@@ -444,6 +522,40 @@ def record_completed_episode(draft: EpisodeDraft, history: LessonHistory) -> Non
 
 
 def _section_text(heading: str, research: ResearchPacket) -> str:
+    if "maps change what governments can do" in research.topic.key:
+        sections = {
+            "The idea": (
+                "A map is not the territory: it is a selective model that attaches people, land, "
+                "events, or infrastructure to places. That makes a scattered reality legible to an institution."
+            ),
+            "Why it matters": (
+                "Once locations can be counted and compared, governments can assess land, plan roads and clinics, "
+                "target inspections, coordinate emergency response, and decide where limited capacity goes."
+            ),
+            "How it works / what happened": (
+                "Surveyors define boundaries and categories; records link an address or parcel to an owner, use, "
+                "household, or event. Officials can then join those records to rules and budgets. The gain is "
+                "conditional: inaccurate surveys, weak authority, or missing people produce weak decisions."
+            ),
+            "A concrete example": (
+                "In London's 1854 cholera outbreak, John Snow plotted deaths around the Broad Street pump. "
+                "The cluster made a shared water source visible and helped focus action on the pump. "
+                "It was influential evidence, not a complete germ-theory proof; later epidemiology clarified the cause."
+            ),
+            "Common misconception": (
+                "The misconception is that maps merely describe a fixed world. Choosing a boundary, category, "
+                "or scale decides what is visible—and an unmapped settlement can become absent from a plan."
+            ),
+            "Connection": (
+                "This is like a database schema: fields determine what can be counted, joined, and queried. "
+                "A better map is not automatically neutral; its categories encode institutional priorities."
+            ),
+            "One thing worth remembering": (
+                "Maps increase capacity by converting place into actionable information, but they also distribute "
+                "visibility. Always ask: who is represented, who is missing, and what decision follows?"
+            ),
+        }
+        return sections[heading]
     if heading == "The idea":
         return research.summary
     if heading == "One thing worth remembering":

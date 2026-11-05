@@ -8,7 +8,9 @@ from lattice.visuals import IllustratedVisualProvider, validate_svg
 
 class VisualTests(unittest.TestCase):
     def test_illustrated_provider_emits_valid_readable_svg(self) -> None:
-        scene = StoryboardScene("scene-1", "The idea", "Explain the idea.", "Show it.", 5)
+        scene = StoryboardScene(
+            "scene-1", "The idea", "Explain the idea.", "Show it.", 5
+        )
         with tempfile.TemporaryDirectory() as directory:
             asset = IllustratedVisualProvider().create(scene, directory)
             validate_svg(asset.uri)
@@ -24,7 +26,7 @@ class VisualTests(unittest.TestCase):
             path = Path(directory) / "unsafe.svg"
             path.write_text(
                 '<svg width="1080" height="1920"><script>alert(1)</script>'
-                '<text>Readable</text></svg>',
+                "<text>Readable</text></svg>",
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(ValueError, "executable"):

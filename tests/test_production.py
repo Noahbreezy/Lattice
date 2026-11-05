@@ -2,12 +2,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from lattice.config import load_config
 from lattice.contracts import Episode, EpisodeStatus, Topic
+from lattice.history import LessonHistory
 from lattice.persistence import EpisodeRepository
 from lattice.pipeline import build_production_bundle
 from lattice.production import render_episode_for_review
-from lattice.config import load_config
-from lattice.history import LessonHistory
 from lattice.renderer import FfmpegRenderer
 from lattice.storage import LocalObjectStorage
 

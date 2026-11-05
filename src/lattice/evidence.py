@@ -8,8 +8,8 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .pipeline import ProductionBundle
 from .media_quality import check_media, media_fingerprint
+from .pipeline import ProductionBundle
 
 
 def _sha256(path: Path) -> str:
@@ -41,7 +41,11 @@ def build_review_evidence(
     scenes = []
     for index, scene in enumerate(bundle.storyboard.scenes):
         section = next(
-            (item for item in script.sections if item.heading == scene.script_section_heading),
+            (
+                item
+                for item in script.sections
+                if item.heading == scene.script_section_heading
+            ),
             None,
         )
         claim_matches = _semantic_claim_matches(scene.narration, claims)
@@ -95,7 +99,10 @@ def build_review_evidence(
         report = check_media(video)
         media["validation"] = {
             "passed": report.passed,
-            "issues": [{"code": issue.code, "message": issue.message} for issue in report.issues],
+            "issues": [
+                {"code": issue.code, "message": issue.message}
+                for issue in report.issues
+            ],
             "audio": report.has_audio,
             "width": report.width,
             "height": report.height,
@@ -113,28 +120,40 @@ def build_review_evidence(
     scene_mappings = []
     for index, scene in enumerate(bundle.storyboard.scenes):
         entry = subtitle_entries[index] if index < len(subtitle_entries) else None
-        scene_mappings.append({
-            "scene_id": scene.scene_id,
-            "srt_index": index + 1,
-            "start_seconds": entry["start"] if entry else None,
-            "end_seconds": entry["end"] if entry else None,
-            "narration": scene.narration,
-            "srt_narration": entry["text"] if entry else None,
-            "narration_matches_srt": bool(entry and entry["text"] == scene.narration),
-        })
+        scene_mappings.append(
+            {
+                "scene_id": scene.scene_id,
+                "srt_index": index + 1,
+                "start_seconds": entry["start"] if entry else None,
+                "end_seconds": entry["end"] if entry else None,
+                "narration": scene.narration,
+                "srt_narration": entry["text"] if entry else None,
+                "narration_matches_srt": bool(
+                    entry and entry["text"] == scene.narration
+                ),
+            }
+        )
 
     limitations = [
         "Review evidence describes deterministic pipeline inputs and does not establish factual truth.",
         "Animation metrics are renderer-declared metrics, not perceptual measurements.",
     ]
     if any(source.source_type.lower() == "placeholder" for source in research.sources):
-        limitations.append("Research contains placeholder sources and is not publication-ready.")
-    if any(asset.asset_type.endswith("placeholder") for asset in bundle.asset_manifest.assets):
+        limitations.append(
+            "Research contains placeholder sources and is not publication-ready."
+        )
+    if any(
+        asset.asset_type.endswith("placeholder")
+        for asset in bundle.asset_manifest.assets
+    ):
         limitations.append("Asset manifest contains placeholder visual references.")
 
     return {
         "evidence_version": 2,
-        "topic": {"title": research.topic.title, "subject_area": research.topic.subject_area},
+        "topic": {
+            "title": research.topic.title,
+            "subject_area": research.topic.subject_area,
+        },
         "hashes": hashes,
         "paths": paths,
         "media": media,
@@ -142,7 +161,9 @@ def build_review_evidence(
             "present": bool(subtitle_entries),
             "entry_count": len(subtitle_entries),
             "scene_mappings": scene_mappings,
-            "timing_valid": _valid_srt_timing(subtitle_entries, len(bundle.storyboard.scenes)),
+            "timing_valid": _valid_srt_timing(
+                subtitle_entries, len(bundle.storyboard.scenes)
+            ),
         },
         "provenance": {
             "research": f"research:{research.topic.key}:v1",
@@ -168,7 +189,9 @@ def build_review_evidence(
         "scenes": scenes,
         "timing": {
             "script_estimated_seconds": script.estimated_duration_seconds,
-            "storyboard_seconds": sum(scene.duration_seconds for scene in bundle.storyboard.scenes),
+            "storyboard_seconds": sum(
+                scene.duration_seconds for scene in bundle.storyboard.scenes
+            ),
             "scene_count": len(bundle.storyboard.scenes),
         },
         "limitations": limitations,
@@ -176,22 +199,49 @@ def build_review_evidence(
 
 
 _STOPWORDS = {
-    "a", "an", "and", "are", "as", "at", "can", "does", "for", "from",
-    "how", "in", "is", "it", "of", "on", "or", "that", "the", "this",
-    "to", "what", "when", "which", "why", "with",
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "can",
+    "does",
+    "for",
+    "from",
+    "how",
+    "in",
+    "is",
+    "it",
+    "of",
+    "on",
+    "or",
+    "that",
+    "the",
+    "this",
+    "to",
+    "what",
+    "when",
+    "which",
+    "why",
+    "with",
 }
 
 
-def _semantic_claim_matches(narration: str, claims: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _semantic_claim_matches(
+    narration: str, claims: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
     """Map only claims with meaningful lexical overlap to a scene."""
     words = {
-        word for word in re.findall(r"[a-z0-9]+", narration.lower())
+        word
+        for word in re.findall(r"[a-z0-9]+", narration.lower())
         if len(word) > 3 and word not in _STOPWORDS
     }
     matches = []
     for claim in claims:
         claim_words = {
-            word for word in re.findall(r"[a-z0-9]+", claim["statement"].lower())
+            word
+            for word in re.findall(r"[a-z0-9]+", claim["statement"].lower())
             if len(word) > 3 and word not in _STOPWORDS
         }
         overlap = sorted(words & claim_words)
@@ -212,12 +262,14 @@ def _read_srt(path: Path | None) -> list[dict[str, Any]]:
         if len(lines) < 3 or "-->" not in lines[1]:
             continue
         start, end = (item.strip() for item in lines[1].split("-->", 1))
-        entries.append({
-            "index": lines[0],
-            "start": _srt_seconds(start),
-            "end": _srt_seconds(end),
-            "text": "\n".join(lines[2:]),
-        })
+        entries.append(
+            {
+                "index": lines[0],
+                "start": _srt_seconds(start),
+                "end": _srt_seconds(end),
+                "text": "\n".join(lines[2:]),
+            }
+        )
     return entries
 
 
@@ -239,5 +291,7 @@ def _valid_srt_timing(entries: list[dict[str, Any]], scene_count: int) -> bool:
 def write_review_evidence(evidence: dict[str, Any], path: str | Path) -> Path:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    destination.write_text(
+        json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     return destination

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import re
 import hashlib
 import json
+import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 
 from .config import ConfigError
@@ -44,26 +44,60 @@ class ArtifactProvenance:
         _text(self.artifact_id, "provenance.artifact_id")
         if not isinstance(self.artifact_version, int) or self.artifact_version < 1:
             raise ConfigError("provenance.artifact_version must be positive.")
-        for field in ("config_version", "config_hash", "prompt_version", "provider_model"):
+        for field in (
+            "config_version",
+            "config_hash",
+            "prompt_version",
+            "provider_model",
+        ):
             value = getattr(self, field)
             if value and not isinstance(value, str):
                 raise ConfigError(f"provenance.{field} must be a string.")
-        if any(not isinstance(value, str) or not value.strip() for value in self.input_artifact_ids):
-            raise ConfigError("provenance.input_artifact_ids must contain non-empty strings.")
+        if any(
+            not isinstance(value, str) or not value.strip()
+            for value in self.input_artifact_ids
+        ):
+            raise ConfigError(
+                "provenance.input_artifact_ids must contain non-empty strings."
+            )
         if self.content_hash and not re.fullmatch(r"[0-9a-f]{64}", self.content_hash):
-            raise ConfigError("provenance.content_hash must be a lowercase SHA-256 hash.")
+            raise ConfigError(
+                "provenance.content_hash must be a lowercase SHA-256 hash."
+            )
 
     @classmethod
-    def for_content(cls, artifact_id: str, content: object, **kwargs: object) -> "ArtifactProvenance":
-        serialized = json.dumps(content, sort_keys=True, separators=(",", ":"), default=str)
+    def for_content(
+        cls,
+        artifact_id: str,
+        content: object,
+        *,
+        artifact_version: int = 1,
+        config_version: str = "",
+        config_hash: str = "",
+        prompt_version: str = "",
+        provider_model: str = "",
+        input_artifact_ids: tuple[str, ...] = (),
+        created_at: str = "",
+        updated_at: str = "",
+        approval_state: ApprovalState = ApprovalState.PENDING,
+    ) -> ArtifactProvenance:
+        serialized = json.dumps(
+            content, sort_keys=True, separators=(",", ":"), default=str
+        )
         digest = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
-        timestamp = kwargs.pop("created_at", "") or now_utc()
+        timestamp = created_at or now_utc()
         return cls(
             artifact_id=artifact_id,
+            artifact_version=artifact_version,
+            config_version=config_version,
+            config_hash=config_hash,
+            prompt_version=prompt_version,
+            provider_model=provider_model,
+            input_artifact_ids=input_artifact_ids,
             content_hash=digest,
             created_at=timestamp,
-            updated_at=kwargs.pop("updated_at", timestamp),
-            **kwargs,
+            updated_at=updated_at or timestamp,
+            approval_state=approval_state,
         )
 
 
@@ -170,7 +204,12 @@ class StoryboardScene:
     duration_seconds: int
 
     def __post_init__(self) -> None:
-        for field in ("scene_id", "script_section_heading", "narration", "visual_direction"):
+        for field in (
+            "scene_id",
+            "script_section_heading",
+            "narration",
+            "visual_direction",
+        ):
             _text(getattr(self, field), f"storyboard_scene.{field}")
         if self.duration_seconds < 1:
             raise ConfigError("storyboard_scene.duration_seconds must be positive.")
@@ -253,15 +292,20 @@ class RenderJob:
         if not isinstance(self.version, int) or self.version < 1:
             raise ConfigError("render_job.version must be positive.")
 
-    def transition_to(self, status: RenderJobStatus) -> "RenderJob":
+    def transition_to(self, status: RenderJobStatus) -> RenderJob:
         allowed = {
             RenderJobStatus.QUEUED: (RenderJobStatus.RUNNING, RenderJobStatus.FAILED),
-            RenderJobStatus.RUNNING: (RenderJobStatus.SUCCEEDED, RenderJobStatus.FAILED),
+            RenderJobStatus.RUNNING: (
+                RenderJobStatus.SUCCEEDED,
+                RenderJobStatus.FAILED,
+            ),
             RenderJobStatus.SUCCEEDED: (),
             RenderJobStatus.FAILED: (),
         }
         if status not in allowed[self.status]:
-            raise ValueError(f"Cannot transition render job from {self.status.value} to {status.value}.")
+            raise ValueError(
+                f"Cannot transition render job from {self.status.value} to {status.value}."
+            )
         return RenderJob(
             job_id=self.job_id,
             storyboard=self.storyboard,
@@ -289,7 +333,7 @@ class PublishedVideo:
         if self.approval_state == ApprovalState.APPROVED and not self.uri:
             raise ConfigError("published_video.uri is required when approved.")
 
-    def transition_to(self, approval_state: ApprovalState) -> "PublishedVideo":
+    def transition_to(self, approval_state: ApprovalState) -> PublishedVideo:
         allowed = {
             ApprovalState.PENDING: (ApprovalState.APPROVED, ApprovalState.REJECTED),
             ApprovalState.APPROVED: (),
@@ -387,7 +431,9 @@ class Review:
         if self.decision == ReviewDecision.REJECT and not (
             self.feedback.strip() or self.criteria or self.markers
         ):
-            raise ConfigError("rejected reviews require feedback, criteria, or markers.")
+            raise ConfigError(
+                "rejected reviews require feedback, criteria, or markers."
+            )
         if any(not isinstance(item, str) or not item.strip() for item in self.criteria):
             raise ConfigError("review.criteria must contain non-empty strings.")
 
@@ -395,4 +441,4 @@ class Review:
 def now_utc() -> str:
     """Return a stable, serializable UTC timestamp for artifact provenance."""
 
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()

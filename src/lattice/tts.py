@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
 import tempfile
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -168,7 +168,9 @@ class WindowsSpeechTts:
                 check=False,
             )
         if completed.returncode != 0:
-            raise RuntimeError(f"Windows speech synthesis failed: {completed.stderr.strip()}")
+            raise RuntimeError(
+                f"Windows speech synthesis failed: {completed.stderr.strip()}"
+            )
         return validate_narration(_estimated_narration(output, text, "windows-sapi"))
 
 

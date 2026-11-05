@@ -75,7 +75,9 @@ class QualityTests(unittest.TestCase):
             topic=self.topic,
             summary="placeholder lesson",
             sections=tuple(
-                ScriptSection(heading, "Useful explanation with enough words for review.")
+                ScriptSection(
+                    heading, "Useful explanation with enough words for review."
+                )
                 for heading in self.config.required_sections
             ),
             claims=tuple(

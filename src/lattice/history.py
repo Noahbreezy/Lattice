@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 import re
 import sys
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterable, Iterator
 
 from .contracts import Topic
 
@@ -32,7 +32,9 @@ class LessonHistory:
                     self._topics.add(topic.key)
                     self._write()
                     return topic
-        raise ValueError("No unused topic seeds remain; add more topics or start a new project.")
+        raise ValueError(
+            "No unused topic seeds remain; add more topics or start a new project."
+        )
 
     def record(self, topic: Topic) -> None:
         with self._lock():
@@ -52,11 +54,15 @@ class LessonHistory:
         try:
             value = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
-            raise ValueError(f"Could not read lesson history {self.path}: {exc}") from exc
+            raise ValueError(
+                f"Could not read lesson history {self.path}: {exc}"
+            ) from exc
         if not isinstance(value, list) or any(
             not isinstance(item, str) for item in value
         ):
-            raise ValueError(f"Lesson history {self.path} must contain an array of strings.")
+            raise ValueError(
+                f"Lesson history {self.path} must contain an array of strings."
+            )
         return {_normalize(item) for item in value}
 
     @contextmanager

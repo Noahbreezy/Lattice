@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .contracts import Episode, EpisodeStatus, Review, ReviewDecision, ReviewMarker, now_utc
+from .contracts import (
+    Episode,
+    EpisodeStatus,
+    Review,
+    ReviewDecision,
+    ReviewMarker,
+    now_utc,
+)
 
 
 @dataclass(frozen=True)

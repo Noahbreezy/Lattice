@@ -1,8 +1,8 @@
 import json
-import unittest
 import tempfile
-from pathlib import Path
+import unittest
 from http.client import HTTPConnection
+from pathlib import Path
 from threading import Thread
 
 from lattice.contracts import Episode, EpisodeStatus, Topic
@@ -13,10 +13,15 @@ from lattice.persistence import EpisodeRepository
 class LocalApiTests(unittest.TestCase):
     def test_mobile_review_app_and_queue_require_api_token(self) -> None:
         repository = EpisodeRepository()
-        repository.save(Episode(
-            "queued-video", Topic("A topic", "systems"),
-            EpisodeStatus.AWAITING_REVIEW, 1, "private://video.mp4",
-        ))
+        repository.save(
+            Episode(
+                "queued-video",
+                Topic("A topic", "systems"),
+                EpisodeStatus.AWAITING_REVIEW,
+                1,
+                "private://video.mp4",
+            )
+        )
         token = "local-review-token"
         server = create_review_server(repository, port=0, review_token=token)
         thread = Thread(target=server.serve_forever, daemon=True)
@@ -36,7 +41,8 @@ class LocalApiTests(unittest.TestCase):
         connection.request("GET", "/review-queue")
         self.assertEqual(connection.getresponse().status, 401)
         connection.request(
-            "GET", "/review-queue",
+            "GET",
+            "/review-queue",
             headers={"Authorization": "Bearer " + token},
         )
         response = connection.getresponse()
@@ -102,26 +108,35 @@ class LocalApiTests(unittest.TestCase):
         thread = Thread(target=server.serve_forever, daemon=True)
         thread.start()
         connection = HTTPConnection("127.0.0.1", server.server_port)
-        body = json.dumps({
-            "decision": "reject",
-            "reviewer_id": "owner",
-            "criteria": ["visual_clarity"],
-            "markers": [{
-                "start_seconds": 2,
-                "end_seconds": 8,
-                "criterion": "visual_clarity",
-                "comment": "Use a concrete example.",
-            }],
-        }).encode()
+        body = json.dumps(
+            {
+                "decision": "reject",
+                "reviewer_id": "owner",
+                "criteria": ["visual_clarity"],
+                "markers": [
+                    {
+                        "start_seconds": 2,
+                        "end_seconds": 8,
+                        "criterion": "visual_clarity",
+                        "comment": "Use a concrete example.",
+                    }
+                ],
+            }
+        ).encode()
         connection.request(
             "POST",
             "/episodes/episode-marked/review",
             body=body,
-            headers={"Authorization": "Bearer token", "Content-Type": "application/json"},
+            headers={
+                "Authorization": "Bearer token",
+                "Content-Type": "application/json",
+            },
         )
         response = connection.getresponse()
         self.assertEqual(response.status, 200)
-        self.assertEqual(repository.reviews_for("episode-marked")[0].criteria, ("visual_clarity",))
+        self.assertEqual(
+            repository.reviews_for("episode-marked")[0].criteria, ("visual_clarity",)
+        )
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
@@ -166,13 +181,15 @@ class LocalApiTests(unittest.TestCase):
             outside = Path(directory) / "outside.mp4"
             outside.write_bytes(b"private")
             repository = EpisodeRepository()
-            repository.save(Episode(
-                "episode-outside",
-                Topic("A topic", "systems"),
-                EpisodeStatus.AWAITING_REVIEW,
-                1,
-                str(outside),
-            ))
+            repository.save(
+                Episode(
+                    "episode-outside",
+                    Topic("A topic", "systems"),
+                    EpisodeStatus.AWAITING_REVIEW,
+                    1,
+                    str(outside),
+                )
+            )
             server = create_review_server(
                 repository, port=0, review_token="token", media_root=media_root
             )
