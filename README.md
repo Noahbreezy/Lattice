@@ -57,7 +57,8 @@ history = LessonHistory(Path("var/lesson-history.json"))
 draft = create_episode_draft(config, history)
 print(draft.topic.title)
 for section in draft.script.sections:
-    print(f"\n## {section.heading}\n{section.text}")
+    print(f"\n## {section.heading}\nNarration: {section.text}")
+    print(f"Visual explanation: {section.visual_description}")
 '@ | python -
 ```
 
@@ -122,6 +123,7 @@ bundle = build_production_bundle(
     LessonHistory(Path("var\lesson-history.json")),
 )
 print(bundle.draft.script.sections[0].text)
+print(bundle.draft.script.sections[0].visual_description)
 '@ | python -
 ```
 
@@ -268,9 +270,12 @@ database:
 lattice-run-local configs/knowledge-channel.json
 ```
 
-The command writes a JSON artifact and asset manifest under
+The command writes a JSON artifact, a canonical `*.script.md` timed production
+script, and an asset manifest under
 `var/lattice-artifacts`, persists the episode in `var/lattice.sqlite`, and
-prints its `AWAITING_REVIEW` status. Use `--database`, `--output`, and
+prints its `AWAITING_REVIEW` status. Every production-script scene contains a
+narration block, a standalone consistently themed Higgsfield visual prompt, and
+contiguous timing-synchronization beats. Use `--database`, `--output`, and
 `--history` to select local paths. It does not publish or contact external
 services; invalid configuration and pipeline failures are reported as
 non-zero, actionable errors.

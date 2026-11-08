@@ -18,7 +18,7 @@ from .evidence import build_review_evidence, write_review_evidence
 from .history import LessonHistory
 from .local_api import create_review_server
 from .persistence import EpisodeRepository
-from .pipeline import build_production_bundle
+from .pipeline import build_production_bundle, format_production_script
 from .production import render_episode_for_review
 from .renderer import FfmpegRenderer
 from .storage import LocalObjectStorage
@@ -118,9 +118,14 @@ def run_local_main() -> int:
         if not isinstance(payload, dict):
             raise TypeError("Internal error: artifact payload must be an object.")
         artifact_path = artifact_dir / f"{episode_id}.json"
+        script_path = artifact_dir / f"{episode_id}.script.md"
         manifest_path = artifact_dir / f"{episode_id}.manifest.json"
         serialized = json.dumps(payload, indent=2, sort_keys=True) + "\n"
         artifact_path.write_text(serialized, encoding="utf-8")
+        script_path.write_text(
+            format_production_script(bundle.draft.script, bundle.storyboard),
+            encoding="utf-8",
+        )
         manifest_path.write_text(
             json.dumps(_stable_value(bundle.asset_manifest), indent=2, sort_keys=True)
             + "\n",
@@ -179,6 +184,7 @@ def run_local_main() -> int:
         write_review_evidence(evidence, rendered_evidence)
         print(f"Episode: {awaiting.id}")
         print(f"Artifact: {artifact_path}")
+        print(f"Production script: {script_path}")
         print(f"Manifest: {manifest_path}")
         print(f"Evidence: {evidence_path}")
         print(f"Queue status: {awaiting.status.value}")

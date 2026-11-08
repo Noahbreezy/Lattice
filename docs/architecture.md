@@ -73,7 +73,11 @@ automated checks or provider errors; it should not pause for a human lesson
 approval.
 `OllamaLessonProvider` implements this capability through Ollama's local JSON
 generation endpoint. It converts the model response into a structured
-`AILesson`, then into the existing research and script contracts.
+`AILesson`, then into the existing research and script contracts. A model response
+is rejected if any logical section lacks a substantive visual description. The
+canonical production script is built from the timed storyboard rather than by
+printing lesson prose: each scene includes narration, a self-contained Higgsfield
+visual prompt with the shared style bible, and contiguous synchronized beats.
 `build_production_bundle` selects this configured provider by default.
 Deterministic demo research is reserved for explicit `offline=True` calls in
 tests and offline development.

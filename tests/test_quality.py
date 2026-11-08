@@ -82,6 +82,7 @@ class QualityTests(unittest.TestCase):
         self.assertIn("claim-count", codes)
         self.assertIn("uncertainty", codes)
         self.assertIn("unsupported-certainty", codes)
+        self.assertIn("visual-description", codes)
 
     def test_lesson_quality_rejects_placeholder_content(self) -> None:
         lesson = AILesson(

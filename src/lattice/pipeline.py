@@ -349,7 +349,9 @@ def build_storyboard(config: ProjectConfig, script: Script) -> Storyboard:
                 narration=section.text,
                 visual_direction=_visual_direction(section, script.topic),
                 duration_seconds=duration,
-                timing_sync=_timing_sync(section.text, duration),
+                timing_sync=_timing_sync(
+                    section.text, duration, section.visual_description
+                ),
             )
         )
     scenes = tuple(scene_items)
@@ -378,35 +380,68 @@ def _visual_direction(section: ScriptSection, topic: Topic) -> str:
         f"sequence: {section.text}"
     )
     return (
-        f"Generate one high-quality 9:16 educational video scene about '{topic.title}'. "
-        f"Logical step: {section.heading}. Visual explanation: {explanation} "
+        f"HIGGSFIELD SCENE PROMPT — Generate one high-quality 9:16 educational video "
+        f"scene about '{topic.title}'. Logical step: {section.heading}. "
+        "SHARED STYLE BIBLE: premium cinematic editorial animation grounded in a "
+        "physically coherent environment; deep navy, warm amber, and parchment palette; "
+        "soft directional light; restrained translucent explanatory overlays; smooth, "
+        "deliberate camera movement; realistic scale and motion; consistent recurring "
+        "subjects and locations across the complete video. "
+        "SCENE ACTION REFERENCE: use the following only for its subjects, setting, "
+        "actions, mechanism, and transition; the shared style bible overrides any "
+        "conflicting palette, lighting, rendering, aspect-ratio, or visible-text "
+        f"direction inside it. {explanation} "
         "Make the changing state, mechanism, comparison, or consequence visually "
         "unambiguous. Use a composed foreground, middle ground, and background; "
         "controlled camera movement; physically coherent subject motion; and a clear "
-        "visual handoff to the next scene. Preserve subject and palette continuity. "
+        "visual handoff to the next scene. Preserve the shared subjects, environment, "
+        "lighting, rendering style, and palette exactly. "
         "No baked-in captions, logos, watermarks, voiceover audio, or decorative stock "
-        "footage. Reserve clean space for separately rendered captions."
+        "footage. Do not show readable interface or prompt text. Reserve clean space "
+        "for separately rendered captions."
     )
 
 
-def _timing_sync(narration: str, duration_seconds: int) -> tuple[SceneBeat, ...]:
+def _timing_sync(
+    narration: str, duration_seconds: int, visual_description: str
+) -> tuple[SceneBeat, ...]:
     """Divide a scene into synchronized setup, mechanism, and result beats."""
 
     beat_count = min(3, duration_seconds, max(1, len(narration.split())))
     chunks = _split_narration(narration, beat_count)
-    boundaries = [
-        round(index * duration_seconds / beat_count) for index in range(beat_count + 1)
+    word_counts = [len(chunk.split()) for chunk in chunks]
+    exact_durations = [
+        duration_seconds * word_count / sum(word_counts) for word_count in word_counts
     ]
+    durations = [max(1, int(value)) for value in exact_durations]
+    while sum(durations) < duration_seconds:
+        index = max(
+            range(len(durations)),
+            key=lambda item: exact_durations[item] - durations[item],
+        )
+        durations[index] += 1
+    while sum(durations) > duration_seconds:
+        index = max(
+            (item for item, duration in enumerate(durations) if duration > 1),
+            key=lambda item: durations[item] - exact_durations[item],
+        )
+        durations[index] -= 1
+    boundaries = [0]
+    for duration in durations:
+        boundaries.append(boundaries[-1] + duration)
     phases = (
-        "Establish the concrete subject and initial state described here",
-        "Animate the causal action, comparison, or transformation described here",
-        "Resolve on the resulting state or takeaway described here",
+        "Beginning: establish the concrete subject and initial state",
+        "Middle: animate the causal action, comparison, or transformation",
+        "End: resolve on the resulting state and visual handoff",
     )
     return tuple(
         SceneBeat(
             start_seconds=boundaries[index],
             end_seconds=boundaries[index + 1],
-            visual=f"{phases[min(index, 2)]}: {chunk}",
+            visual=(
+                f"{phases[min(index, 2)]}. Synchronize this excerpt to the "
+                f"scene-specific plan: {visual_description}"
+            ),
             narration_excerpt=chunk,
         )
         for index, chunk in enumerate(chunks)
@@ -438,6 +473,72 @@ def _split_narration(narration: str, count: int) -> tuple[str, ...]:
         " ".join(words[boundaries[index] : boundaries[index + 1]])
         for index in range(count)
     )
+
+
+def format_production_script(script: Script, storyboard: Storyboard) -> str:
+    """Render the canonical, human-readable timed video production script."""
+
+    if len(script.sections) != len(storyboard.scenes):
+        raise ValueError("Script sections and storyboard scenes must align.")
+    total_duration = sum(scene.duration_seconds for scene in storyboard.scenes)
+    if (
+        storyboard.maximum_duration_seconds is not None
+        and total_duration > storyboard.maximum_duration_seconds
+    ):
+        raise ValueError("Production script exceeds its maximum duration.")
+
+    def timestamp(seconds: int) -> str:
+        return f"{seconds // 60:02d}:{seconds % 60:02d}"
+
+    lines = [
+        "# Timed video production script",
+        "",
+        f"# {script.topic.title}",
+        "",
+        "Format: 9:16 short-form educational explainer  ",
+        f"Total duration: {timestamp(total_duration)} ({total_duration} seconds)  ",
+        (
+            "Visual continuity: every scene repeats the same style bible, palette, "
+            "rendering rules, and continuity requirements in its standalone "
+            "Higgsfield prompt."
+        ),
+    ]
+    global_start = 0
+    for index, (section, scene) in enumerate(
+        zip(script.sections, storyboard.scenes, strict=True), start=1
+    ):
+        if section.heading != scene.script_section_heading:
+            raise ValueError(
+                "Script section headings and storyboard scenes must align."
+            )
+        global_end = global_start + scene.duration_seconds
+        lines.extend(
+            [
+                "",
+                f"## Scene {index} — {scene.script_section_heading}",
+                "",
+                f"Global time: {timestamp(global_start)}–{timestamp(global_end)}  ",
+                f"Duration: {scene.duration_seconds} seconds",
+                "",
+                "### Narration",
+                "",
+                f"> {scene.narration}",
+                "",
+                "### Higgsfield visual prompt",
+                "",
+                f"> {scene.visual_direction}",
+                "",
+                "### Timing synchronization",
+                "",
+            ]
+        )
+        for beat in scene.timing_sync:
+            lines.append(
+                f"- {timestamp(beat.start_seconds)}–{timestamp(beat.end_seconds)} — "
+                f"Narration: “{beat.narration_excerpt}” Visual: {beat.visual}"
+            )
+        global_start = global_end
+    return "\n".join(lines) + "\n"
 
 
 def build_asset_manifest(

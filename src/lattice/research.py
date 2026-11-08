@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 from urllib.error import HTTPError, URLError
@@ -92,6 +93,7 @@ class OllamaLessonProvider:
                     "model": self.model,
                     "prompt": prompt,
                     "stream": False,
+                    "think": False,
                     "format": "json",
                     "options": {"temperature": 0.4},
                 }
@@ -115,16 +117,21 @@ class OllamaLessonProvider:
                 f"Ollama lesson generation failed for model '{self.model}': {exc}"
             ) from exc
         try:
+            section_items = list(payload["sections"])
+            returned_headings = tuple(
+                _heading_key(str(item["heading"])) for item in section_items
+            )
+            expected_headings = tuple(_heading_key(heading) for heading in required)
+            if returned_headings != expected_headings:
+                raise ValueError("Model returned the wrong lesson section headings.")
             sections = tuple(
                 ScriptSection(
-                    str(item["heading"]),
+                    heading,
                     str(item["text"]),
                     str(item.get("visual_description", "")),
                 )
-                for item in payload["sections"]
+                for heading, item in zip(required, section_items, strict=True)
             )
-            if tuple(section.heading for section in sections) != tuple(required):
-                raise ValueError("Model returned the wrong lesson section headings.")
             claims = tuple(
                 Claim(
                     str(item["statement"]),
@@ -157,6 +164,15 @@ class OllamaLessonProvider:
         return lesson
 
 
+def _heading_key(value: str) -> str:
+    """Match harmless heading variations while preserving configured output labels."""
+
+    words = re.sub(r"[^a-z0-9]+", " ", value.lower()).split()
+    if words and words[0] in {"a", "an", "the"}:
+        words = words[1:]
+    return " ".join(words)
+
+
 def create_configured_lesson_provider(config: ProjectConfig) -> AILessonProvider:
     """Create the configured lesson provider for production execution."""
 
@@ -182,7 +198,7 @@ def _lesson_prompt(topic: Topic, config: ProjectConfig) -> str:
     sections = "\n".join(f"- {heading}" for heading in config.required_sections)
     rules = "\n".join(f"- {rule}" for rule in config.learning_rules)
     max_words = config.max_video_length_seconds * 150 // 60
-    return f"""Create a recreational educational video script about "{topic.title}" ({topic.subject_area}).
+    return f"""Create a recreational educational video production plan about "{topic.title}" ({topic.subject_area}).
 Return JSON only with this exact shape:
 {{"summary": "...", "uncertainty": "...", "sections": [{{"heading": "...", "text": "spoken narration...", "visual_description": "standalone video-generation prompt..."}}],
 "claims": [{{"statement": "...", "evidence_level": "model-generated", "uncertainty": "..."}}]}}
@@ -198,6 +214,12 @@ For every scene:
   subject, initial state, causal action or comparison, and resulting state.
 - Specify setting, composition, camera behavior, subject motion, explanatory graphic
   motion, and the transition into the next logical step. Keep continuity across scenes.
+- Make every visual description at least 25 words and detailed enough to paste into
+  Higgsfield without relying on the narration or any other scene for context.
+- Use the same recurring subjects, visual motifs, physical environment, lighting, and
+  palette across all scenes: premium cinematic editorial animation, deep navy, warm
+  amber, and parchment, with soft directional light and restrained translucent
+  explanatory overlays. Do not introduce a different palette or rendering style.
 - Do not request baked-in captions, logos, voiceover audio, or visible prompt text.
 Style and content rules:
 {rules}

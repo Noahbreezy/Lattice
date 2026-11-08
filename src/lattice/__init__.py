@@ -46,6 +46,7 @@ from .pipeline import (
     build_storyboard,
     create_episode_draft,
     create_render_job,
+    format_production_script,
     publish_video,
     regenerate_scenes,
 )
@@ -158,6 +159,7 @@ __all__ = [
     "create_episode_draft",
     "create_render_job",
     "create_review_server",
+    "format_production_script",
     "load_config",
     "measure_animation",
     "media_fingerprint",

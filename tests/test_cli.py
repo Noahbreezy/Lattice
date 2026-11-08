@@ -32,6 +32,12 @@ class LocalCliTests(unittest.TestCase):
             self.assertEqual(len(episodes), 1)
             self.assertEqual(episodes[0].status, EpisodeStatus.AWAITING_REVIEW)
             self.assertTrue(Path(episodes[0].final_video_uri).is_file())
+            scripts = list((path / "artifacts").glob("*.script.md"))
+            self.assertEqual(len(scripts), 1)
+            self.assertIn(
+                "### Higgsfield visual prompt",
+                scripts[0].read_text(encoding="utf-8"),
+            )
             self.assertTrue(
                 Path(episodes[0].final_video_uri)
                 .with_name(Path(episodes[0].final_video_uri).stem + ".manifest.json")

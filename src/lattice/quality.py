@@ -75,6 +75,18 @@ def check_lesson(
                 f"Each lesson section must contain {min_section_words}-{max_section_words} words.",
             )
         )
+
+    visual_word_counts = tuple(
+        len(section.visual_description.split()) for section in lesson.sections
+    )
+    if any(count < 25 for count in visual_word_counts):
+        issues.append(
+            QualityIssue(
+                "visual-description",
+                "Every lesson section must include a specific visual description "
+                "of at least 25 words for video generation.",
+            )
+        )
     lesson_word_count = sum(section_word_counts)
     if max_lesson_words is None:
         max_lesson_words = config.max_video_length_seconds * 150 // 60
@@ -172,6 +184,14 @@ def check_script(
         issues.append(
             QualityIssue(
                 "claim-count", "Script claim count does not match the research packet."
+            )
+        )
+    if any(len(section.visual_description.split()) < 25 for section in script.sections):
+        issues.append(
+            QualityIssue(
+                "visual-description",
+                "Every script section must include a specific visual description "
+                "of at least 25 words.",
             )
         )
     issues.extend(
