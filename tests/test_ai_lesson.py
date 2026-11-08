@@ -36,6 +36,10 @@ class AiLessonTests(unittest.TestCase):
                         f"Explanation of {heading} with a concrete mechanism, "
                         "tradeoff, and carefully scoped example."
                     ),
+                    "visual_description": (
+                        f"Show the initial state, mechanism, and result for {heading} "
+                        "in one continuous vertical shot."
+                    ),
                 }
                 for heading in config.required_sections
             ],
@@ -58,6 +62,7 @@ class AiLessonTests(unittest.TestCase):
         )
         lesson = provider.generate_lesson(Topic("Path dependence", "systems"), config)
         self.assertEqual(len(lesson.sections), len(config.required_sections))
+        self.assertIn("continuous vertical shot", lesson.sections[0].visual_description)
         self.assertEqual(
             lesson.to_research_packet().sources[0].source_type, "ai-generated"
         )

@@ -80,7 +80,7 @@
       },
       {
         "name": "script model",
-        "purpose": "Turn approved research into the configured lesson structure.",
+        "purpose": "Write timed scene-by-scene video scripts with narration and provider-ready visual explanations.",
         "provider": "ollama",
         "model": "qwen3:4b",
         "endpoint": "http://127.0.0.1:11434/api/generate",
@@ -88,7 +88,7 @@
       },
       {
         "name": "video generator",
-        "purpose": "Generate or animate visual assets and scenes.",
+        "purpose": "Generate each timed explanatory scene from its standalone visual prompt and narration sync plan.",
         "provider": "higgsfield",
         "required": false
       },

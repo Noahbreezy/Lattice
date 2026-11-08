@@ -17,6 +17,10 @@ Script -> Storyboard -> AssetManifest -> RenderJob -> PublishedVideo
 `publish_video` emit version-one contracts with provenance links and SHA-256
 content hashes. They use local placeholder assets and a provider-neutral
 `RenderProvider` protocol; no vendor API is embedded in the domain model.
+Each storyboard scene is a standalone 9:16 generation prompt for one logical
+step. It carries matching narration plus contiguous setup, mechanism, and
+result beats whose time ranges cover the full scene, so a video provider can
+generate explanatory motion in sync with the voice track.
 
 `ResearchProvider` in `research.py` is the boundary for a real source
 retrieval integration. `validate_research` and the quality checks in

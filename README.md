@@ -81,7 +81,10 @@ create a new project. Keep the top-level sections stable:
 
 Tool entries describe capabilities rather than hard-coding a vendor API. This
 keeps a project portable: integrations can later map a capability such as
-`video generator` to Higgsfield or another provider.
+`video generator` to Higgsfield or another provider. Generated storyboard
+entries are standalone scene prompts: each contains the spoken narration, a
+specific visual explanation of that logical step, the scene duration, and a
+beat-by-beat timing plan that synchronizes visual actions to narration excerpts.
 
 Validate any configuration before using it:
 

@@ -116,7 +116,11 @@ class OllamaLessonProvider:
             ) from exc
         try:
             sections = tuple(
-                ScriptSection(str(item["heading"]), str(item["text"]))
+                ScriptSection(
+                    str(item["heading"]),
+                    str(item["text"]),
+                    str(item.get("visual_description", "")),
+                )
                 for item in payload["sections"]
             )
             if tuple(section.heading for section in sections) != tuple(required):
@@ -177,12 +181,21 @@ def create_configured_lesson_provider(config: ProjectConfig) -> AILessonProvider
 def _lesson_prompt(topic: Topic, config: ProjectConfig) -> str:
     sections = "\n".join(f"- {heading}" for heading in config.required_sections)
     rules = "\n".join(f"- {rule}" for rule in config.learning_rules)
-    return f"""Create a recreational educational lesson about "{topic.title}" ({topic.subject_area}).
+    return f"""Create a recreational educational video script about "{topic.title}" ({topic.subject_area}).
 Return JSON only with this exact shape:
-{{"summary": "...", "uncertainty": "...", "sections": [{{"heading": "...", "text": "..."}}],
+{{"summary": "...", "uncertainty": "...", "sections": [{{"heading": "...", "text": "spoken narration...", "visual_description": "standalone video-generation prompt..."}}],
 "claims": [{{"statement": "...", "evidence_level": "model-generated", "uncertainty": "..."}}]}}
-Use exactly these section headings and make each section useful for a short video:
+Use exactly these section headings. Treat each section as one scene and one logical
+step in the complete explanation:
 {sections}
+For every scene:
+- Write concise spoken narration in "text". Each scene must advance the explanation.
+- Write a specific, standalone 9:16 video-generation prompt in "visual_description".
+- Visually explain the narration instead of merely decorating it. Show the relevant
+  subject, initial state, causal action or comparison, and resulting state.
+- Specify setting, composition, camera behavior, subject motion, explanatory graphic
+  motion, and the transition into the next logical step. Keep continuity across scenes.
+- Do not request baked-in captions, logos, voiceover audio, or visible prompt text.
 Style and content rules:
 {rules}
 Avoid invented statistics, citations, quotations, or confident claims you cannot support.

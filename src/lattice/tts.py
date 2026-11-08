@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from .contracts import Storyboard, StoryboardScene
+from .contracts import SceneBeat, Storyboard, StoryboardScene
 
 
 @dataclass(frozen=True)
@@ -80,6 +80,7 @@ def reconcile_storyboard_timing(
             narration=scene.narration,
             visual_direction=scene.visual_direction,
             duration_seconds=durations[index],
+            timing_sync=_retime_beats(scene.timing_sync, durations[index]),
         )
         for index, scene in enumerate(storyboard.scenes)
     )
@@ -87,6 +88,24 @@ def reconcile_storyboard_timing(
         scenes=scenes,
         version=storyboard.version + 1,
         provenance=storyboard.provenance,
+    )
+
+
+def _retime_beats(
+    beats: tuple[SceneBeat, ...], duration_seconds: int
+) -> tuple[SceneBeat, ...]:
+    if not beats:
+        return ()
+    count = min(len(beats), duration_seconds)
+    boundaries = [round(index * duration_seconds / count) for index in range(count + 1)]
+    return tuple(
+        SceneBeat(
+            boundaries[index],
+            boundaries[index + 1],
+            beats[index].visual,
+            beats[index].narration_excerpt,
+        )
+        for index in range(count)
     )
 
 

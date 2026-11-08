@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -17,6 +18,7 @@ from .contracts import (
     RenderJob,
     RenderJobStatus,
     ResearchPacket,
+    SceneBeat,
     Script,
     ScriptSection,
     Source,
@@ -261,6 +263,7 @@ def build_script(
         ScriptSection(
             heading=heading,
             text=_section_text(heading, research),
+            visual_description=_section_visual_description(heading, research),
         )
         for heading in config.required_sections
     )
@@ -316,16 +319,20 @@ def build_storyboard(config: ProjectConfig, script: Script) -> Storyboard:
 
     total_duration = config.video_length_seconds
     base, remainder = divmod(total_duration, len(script.sections))
-    scenes = tuple(
-        StoryboardScene(
-            scene_id=f"scene-{index}",
-            script_section_heading=section.heading,
-            narration=section.text,
-            visual_direction=_visual_direction(section.heading, script.topic),
-            duration_seconds=base + (1 if index <= remainder else 0),
+    scene_items = []
+    for index, section in enumerate(script.sections, start=1):
+        duration = base + (1 if index <= remainder else 0)
+        scene_items.append(
+            StoryboardScene(
+                scene_id=f"scene-{index}",
+                script_section_heading=section.heading,
+                narration=section.text,
+                visual_direction=_visual_direction(section, script.topic),
+                duration_seconds=duration,
+                timing_sync=_timing_sync(section.text, duration),
+            )
         )
-        for index, section in enumerate(script.sections, start=1)
-    )
+    scenes = tuple(scene_items)
     script_id = script.provenance.artifact_id if script.provenance else ""
     provenance = ArtifactProvenance.for_content(
         f"storyboard:{script.topic.key}:v1",
@@ -339,13 +346,73 @@ def build_storyboard(config: ProjectConfig, script: Script) -> Storyboard:
     return Storyboard(scenes=scenes, provenance=provenance)
 
 
-def _visual_direction(heading: str, topic: Topic) -> str:
-    """Create a stable visual brief that can later be sent to a media provider."""
+def _visual_direction(section: ScriptSection, topic: Topic) -> str:
+    """Create a standalone provider-ready prompt for one explanatory scene."""
 
+    explanation = section.visual_description or (
+        "Turn this exact explanatory step into a concrete visual cause-and-effect "
+        f"sequence: {section.text}"
+    )
     return (
-        f"Vertical educational explainer visual for '{topic.title}': "
-        f"show the concrete idea from the section '{heading}', with restrained "
-        "motion, readable labels, and consistent navy/amber editorial styling."
+        f"Generate one high-quality 9:16 educational video scene about '{topic.title}'. "
+        f"Logical step: {section.heading}. Visual explanation: {explanation} "
+        "Make the changing state, mechanism, comparison, or consequence visually "
+        "unambiguous. Use a composed foreground, middle ground, and background; "
+        "controlled camera movement; physically coherent subject motion; and a clear "
+        "visual handoff to the next scene. Preserve subject and palette continuity. "
+        "No baked-in captions, logos, watermarks, voiceover audio, or decorative stock "
+        "footage. Reserve clean space for separately rendered captions."
+    )
+
+
+def _timing_sync(narration: str, duration_seconds: int) -> tuple[SceneBeat, ...]:
+    """Divide a scene into synchronized setup, mechanism, and result beats."""
+
+    beat_count = min(3, duration_seconds, max(1, len(narration.split())))
+    chunks = _split_narration(narration, beat_count)
+    boundaries = [
+        round(index * duration_seconds / beat_count) for index in range(beat_count + 1)
+    ]
+    phases = (
+        "Establish the concrete subject and initial state described here",
+        "Animate the causal action, comparison, or transformation described here",
+        "Resolve on the resulting state or takeaway described here",
+    )
+    return tuple(
+        SceneBeat(
+            start_seconds=boundaries[index],
+            end_seconds=boundaries[index + 1],
+            visual=f"{phases[min(index, 2)]}: {chunk}",
+            narration_excerpt=chunk,
+        )
+        for index, chunk in enumerate(chunks)
+    )
+
+
+def _split_narration(narration: str, count: int) -> tuple[str, ...]:
+    words = narration.split()
+    boundaries = [0]
+    natural_breaks = {
+        index + 1
+        for index, word in enumerate(words[:-1])
+        if re.search(r"[.!?;:,][\"')\]]?$", word)
+    }
+    for index in range(1, count):
+        target = round(index * len(words) / count)
+        minimum = boundaries[-1] + 1
+        maximum = len(words) - (count - index)
+        candidates = [
+            boundary for boundary in natural_breaks if minimum <= boundary <= maximum
+        ]
+        boundaries.append(
+            min(candidates, key=lambda boundary: abs(boundary - target))
+            if candidates
+            else max(minimum, min(target, maximum))
+        )
+    boundaries.append(len(words))
+    return tuple(
+        " ".join(words[boundaries[index] : boundaries[index + 1]])
+        for index in range(count)
     )
 
 
@@ -511,6 +578,20 @@ def regenerate_scenes(
                 else scene.visual_direction
             ),
             duration_seconds=scene.duration_seconds,
+            timing_sync=tuple(
+                SceneBeat(
+                    beat.start_seconds,
+                    beat.end_seconds,
+                    beat.visual
+                    + (
+                        f" Apply reviewer direction: {feedback.strip()}"
+                        if scene.scene_id in scene_ids
+                        else ""
+                    ),
+                    beat.narration_excerpt,
+                )
+                for beat in scene.timing_sync
+            ),
         )
         for scene in storyboard.scenes
     )
@@ -561,3 +642,15 @@ def _section_text(heading: str, research: ResearchPacket) -> str:
     if heading == "One thing worth remembering":
         return f"Remember the central question: what does {research.topic.title} help us explain?"
     return f"{heading}: develop this section from the verified claims about {research.topic.title}."
+
+
+def _section_visual_description(heading: str, research: ResearchPacket) -> str:
+    """Make local scripts emit usable explanatory prompts, not generic slates."""
+
+    narration = _section_text(heading, research)
+    return (
+        f"Open on a concrete representation of {research.topic.title}. Show this "
+        f"logical step through visible states and motion: {narration} Use one continuous "
+        "shot whose action moves from the starting condition to the consequence, with "
+        "simple diagrammatic overlays only when they clarify the mechanism."
+    )

@@ -169,10 +169,15 @@ class ResearchPacket:
 class ScriptSection:
     heading: str
     text: str
+    visual_description: str = ""
 
     def __post_init__(self) -> None:
         _text(self.heading, "script_section.heading")
         _text(self.text, "script_section.text")
+        if self.visual_description and not self.visual_description.strip():
+            raise ConfigError(
+                "script_section.visual_description must be empty or non-whitespace."
+            )
 
 
 @dataclass(frozen=True)
@@ -196,12 +201,29 @@ class Script:
 
 
 @dataclass(frozen=True)
+class SceneBeat:
+    """A timed visual action synchronized to a narration excerpt."""
+
+    start_seconds: int
+    end_seconds: int
+    visual: str
+    narration_excerpt: str
+
+    def __post_init__(self) -> None:
+        if self.start_seconds < 0 or self.end_seconds <= self.start_seconds:
+            raise ConfigError("scene_beat timestamps must form a positive interval.")
+        _text(self.visual, "scene_beat.visual")
+        _text(self.narration_excerpt, "scene_beat.narration_excerpt")
+
+
+@dataclass(frozen=True)
 class StoryboardScene:
     scene_id: str
     script_section_heading: str
     narration: str
     visual_direction: str
     duration_seconds: int
+    timing_sync: tuple[SceneBeat, ...] = ()
 
     def __post_init__(self) -> None:
         for field in (
@@ -213,6 +235,18 @@ class StoryboardScene:
             _text(getattr(self, field), f"storyboard_scene.{field}")
         if self.duration_seconds < 1:
             raise ConfigError("storyboard_scene.duration_seconds must be positive.")
+        if self.timing_sync:
+            if self.timing_sync[0].start_seconds != 0:
+                raise ConfigError("storyboard_scene.timing_sync must start at zero.")
+            if self.timing_sync[-1].end_seconds != self.duration_seconds:
+                raise ConfigError(
+                    "storyboard_scene.timing_sync must end at the scene duration."
+                )
+            for previous, current in zip(self.timing_sync, self.timing_sync[1:]):
+                if previous.end_seconds != current.start_seconds:
+                    raise ConfigError(
+                        "storyboard_scene.timing_sync intervals must be contiguous."
+                    )
 
 
 @dataclass(frozen=True)

@@ -58,6 +58,15 @@ def build_review_evidence(
                 "duration_seconds": scene.duration_seconds,
                 "asset_id": bundle.asset_manifest.assets[index].asset_id,
                 "visual_direction": scene.visual_direction,
+                "timing_sync": [
+                    {
+                        "start_seconds": beat.start_seconds,
+                        "end_seconds": beat.end_seconds,
+                        "visual": beat.visual,
+                        "narration_excerpt": beat.narration_excerpt,
+                    }
+                    for beat in scene.timing_sync
+                ],
                 "claim_ids": [item["claim_id"] for item in claim_matches],
                 "claim_alignment": [
                     {

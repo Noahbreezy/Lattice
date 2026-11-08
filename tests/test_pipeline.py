@@ -11,6 +11,7 @@ from lattice.pipeline import (
     build_production_bundle,
     build_research_packet,
     build_script,
+    build_storyboard,
     create_episode_draft,
     record_completed_episode,
     regenerate_scenes,
@@ -91,6 +92,27 @@ class PipelineTests(unittest.TestCase):
                 self.config.video_length_seconds,
             )
 
+    def test_storyboard_emits_provider_ready_timed_scene_prompts(self) -> None:
+        script = build_script(
+            self.config,
+            build_demo_research_packet(
+                Topic("Why maps change what governments can do", "geography")
+            ),
+        )
+        storyboard = build_storyboard(self.config, script)
+        for scene in storyboard.scenes:
+            self.assertIn("9:16", scene.visual_direction)
+            self.assertIn("Visual explanation:", scene.visual_direction)
+            self.assertNotIn(
+                "show the concrete idea from the section", scene.visual_direction
+            )
+            self.assertEqual(scene.timing_sync[0].start_seconds, 0)
+            self.assertEqual(scene.timing_sync[-1].end_seconds, scene.duration_seconds)
+            self.assertEqual(
+                " ".join(beat.narration_excerpt for beat in scene.timing_sync),
+                scene.narration,
+            )
+
     def test_demo_research_has_real_source_links(self) -> None:
         packet = build_demo_research_packet(Topic("Path dependence", "systems"))
         self.assertTrue(
@@ -124,6 +146,7 @@ class PipelineTests(unittest.TestCase):
                         ScriptSection(
                             heading,
                             f"Model explanation of {heading} with a concrete example and mechanism.",
+                            f"Animate a concrete cause and effect for {heading}.",
                         )
                         for heading in config.required_sections
                     ),
@@ -157,6 +180,10 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(
                 bundle.draft.script.sections[0].text,
                 "Model explanation of The idea with a concrete example and mechanism.",
+            )
+            self.assertIn(
+                "Animate a concrete cause and effect",
+                bundle.storyboard.scenes[0].visual_direction,
             )
             self.assertEqual(
                 bundle.draft.research.sources[0].source_type, "ai-generated"
