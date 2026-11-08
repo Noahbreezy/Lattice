@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,6 +14,18 @@ class OperationsTests(unittest.TestCase):
             source.write_bytes(b"video")
             storage = LocalObjectStorage(Path(directory) / "objects")
             stored = storage.put_file("videos/one.mp4", source)
+            self.assertTrue(storage.verify(stored))
+
+    def test_storage_writes_frontend_readable_json(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            storage = LocalObjectStorage(Path(directory) / "objects")
+            stored = storage.put_json(
+                "lessons/one/revision-1.json", {"kind": "lesson", "sections": []}
+            )
+            self.assertEqual(
+                json.loads(stored.path.read_text(encoding="utf-8")),
+                {"kind": "lesson", "sections": []},
+            )
             self.assertTrue(storage.verify(stored))
 
     def test_job_lease_recovery_and_audit(self) -> None:

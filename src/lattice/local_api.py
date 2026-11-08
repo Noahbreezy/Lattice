@@ -52,6 +52,12 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
             )
             return
         if path.startswith("/episodes/"):
+            for artifact_kind in ("lesson", "script"):
+                suffix = f"/{artifact_kind}"
+                if path.endswith(suffix):
+                    episode_id = path.removeprefix("/episodes/").removesuffix(suffix)
+                    self._serve_artifact(episode_id, artifact_kind)
+                    return
             if path.endswith("/reviews"):
                 episode_id = path.removeprefix("/episodes/").removesuffix("/reviews")
                 if self.repository.get(episode_id) is None:
@@ -219,6 +225,46 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _serve_artifact(self, episode_id: str, artifact_kind: str) -> None:
+        """Serve a structured private artifact through an authenticated route."""
+
+        if self.media_root is None:
+            self._write(
+                HTTPStatus.NOT_FOUND, {"error": "Artifact serving is not configured."}
+            )
+            return
+        episode = self.repository.get(episode_id)
+        if episode is None:
+            self._write(HTTPStatus.NOT_FOUND, {"error": "Episode not found."})
+            return
+        uri = episode.lesson_uri if artifact_kind == "lesson" else episode.script_uri
+        if not uri:
+            self._write(HTTPStatus.NOT_FOUND, {"error": "Artifact not found."})
+            return
+        candidate = Path(uri)
+        if not candidate.is_absolute():
+            candidate = self.media_root / candidate
+        try:
+            resolved = candidate.resolve()
+            resolved.relative_to(self.media_root.resolve())
+        except ValueError:
+            self._write(
+                HTTPStatus.FORBIDDEN, {"error": "Artifact path is outside storage."}
+            )
+            return
+        if not resolved.is_file():
+            self._write(HTTPStatus.NOT_FOUND, {"error": "Artifact not found."})
+            return
+        try:
+            value = json.loads(resolved.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            self._write(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"error": "Stored artifact is not valid JSON."},
+            )
+            return
+        self._write(HTTPStatus.OK, value)
+
     @staticmethod
     def _episode_json(episode: Episode) -> dict[str, object]:
         return {
@@ -228,6 +274,17 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
             "status": episode.status.value,
             "revision": episode.revision,
             "final_video_uri": episode.final_video_uri,
+            "artifacts": {
+                "video": (
+                    f"/media/{episode.id}" if episode.final_video_uri else None
+                ),
+                "lesson": (
+                    f"/episodes/{episode.id}/lesson" if episode.lesson_uri else None
+                ),
+                "script": (
+                    f"/episodes/{episode.id}/script" if episode.script_uri else None
+                ),
+            },
             "created_at": episode.created_at,
         }
 

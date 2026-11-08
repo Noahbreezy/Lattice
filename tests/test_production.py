@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -40,6 +41,16 @@ class ProductionTests(unittest.TestCase):
             self.assertTrue(
                 (Path(result.final_video_uri).with_suffix(".srt")).is_file()
             )
+            lesson = json.loads(Path(result.lesson_uri).read_text(encoding="utf-8"))
+            script = json.loads(Path(result.script_uri).read_text(encoding="utf-8"))
+            self.assertEqual(lesson["kind"], "lesson")
+            self.assertEqual(lesson["episode_id"], result.id)
+            self.assertTrue(lesson["sections"])
+            self.assertEqual(script["kind"], "script")
+            self.assertIn("production_script", script)
+            persisted = repository.get(result.id)
+            self.assertEqual(persisted.lesson_uri, result.lesson_uri)
+            self.assertEqual(persisted.script_uri, result.script_uri)
             repository.close()
 
 

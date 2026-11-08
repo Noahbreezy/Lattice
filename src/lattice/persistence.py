@@ -61,8 +61,8 @@ class EpisodeRepository:
             """
             INSERT INTO episodes
               (id, topic_title, subject_area, status, revision, final_video_uri,
-               created_at, queue_priority, queue_feedback)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               created_at, lesson_uri, script_uri, queue_priority, queue_feedback)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
               topic_title = excluded.topic_title,
               subject_area = excluded.subject_area,
@@ -70,6 +70,8 @@ class EpisodeRepository:
               revision = excluded.revision,
               final_video_uri = excluded.final_video_uri,
               created_at = excluded.created_at,
+              lesson_uri = excluded.lesson_uri,
+              script_uri = excluded.script_uri,
               queue_priority = excluded.queue_priority,
               queue_feedback = excluded.queue_feedback
             """,
@@ -81,6 +83,8 @@ class EpisodeRepository:
                 episode.revision,
                 episode.final_video_uri,
                 episode.created_at or now_utc(),
+                episode.lesson_uri,
+                episode.script_uri,
                 priority,
                 "",
             ),
@@ -204,7 +208,14 @@ class EpisodeRepository:
             raise RuntimeError("Queued episode disappeared while being claimed.")
         return claimed
 
-    def submit_for_review(self, episode: Episode, final_video_uri: str) -> Episode:
+    def submit_for_review(
+        self,
+        episode: Episode,
+        final_video_uri: str,
+        *,
+        lesson_uri: str = "",
+        script_uri: str = "",
+    ) -> Episode:
         if episode.status != EpisodeStatus.PROCESSING:
             raise ValueError("Only processing episodes can be submitted for review.")
         updated = Episode(
@@ -214,6 +225,8 @@ class EpisodeRepository:
             revision=episode.revision,
             final_video_uri=final_video_uri,
             created_at=episode.created_at or now_utc(),
+            lesson_uri=lesson_uri or episode.lesson_uri,
+            script_uri=script_uri or episode.script_uri,
         )
         self.save(updated)
         return updated
@@ -251,6 +264,8 @@ class EpisodeRepository:
             revision=episode.revision + (1 if decision == ReviewDecision.REJECT else 0),
             final_video_uri=episode.final_video_uri,
             created_at=episode.created_at or now_utc(),
+            lesson_uri=episode.lesson_uri,
+            script_uri=episode.script_uri,
         )
         with self._connection:
             cursor = self._connection.execute(
@@ -480,6 +495,8 @@ class EpisodeRepository:
               revision INTEGER NOT NULL CHECK (revision > 0),
               final_video_uri TEXT NOT NULL DEFAULT '',
               created_at TEXT NOT NULL,
+              lesson_uri TEXT NOT NULL DEFAULT '',
+              script_uri TEXT NOT NULL DEFAULT '',
               queue_priority INTEGER,
               queue_feedback TEXT NOT NULL DEFAULT ''
             );
@@ -546,6 +563,16 @@ class EpisodeRepository:
                 "ALTER TABLE jobs ADD COLUMN lease_until TEXT NOT NULL DEFAULT ''"
             )
             self._connection.commit()
+        episode_columns = {
+            row["name"]
+            for row in self._connection.execute("PRAGMA table_info(episodes)")
+        }
+        for name in ("lesson_uri", "script_uri"):
+            if name not in episode_columns:
+                self._connection.execute(
+                    f"ALTER TABLE episodes ADD COLUMN {name} TEXT NOT NULL DEFAULT ''"
+                )
+        self._connection.commit()
 
     def _next_priority(self) -> int:
         row = self._connection.execute(
@@ -569,6 +596,8 @@ def _episode_from_row(row: sqlite3.Row) -> Episode:
         revision=row["revision"],
         final_video_uri=row["final_video_uri"],
         created_at=row["created_at"],
+        lesson_uri=row["lesson_uri"],
+        script_uri=row["script_uri"],
     )
 
 

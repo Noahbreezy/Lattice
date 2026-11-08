@@ -433,6 +433,8 @@ class Episode:
     revision: int
     final_video_uri: str = ""
     created_at: str = ""
+    lesson_uri: str = ""
+    script_uri: str = ""
 
     def __post_init__(self) -> None:
         _text(self.id, "episode.id")

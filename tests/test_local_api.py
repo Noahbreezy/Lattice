@@ -174,6 +174,66 @@ class LocalApiTests(unittest.TestCase):
             thread.join(timeout=2)
             repository.close()
 
+    def test_episode_exposes_and_serves_structured_content_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            lesson_path = root / "lessons" / "episode-content" / "revision-1.json"
+            script_path = root / "scripts" / "episode-content" / "revision-1.json"
+            lesson_path.parent.mkdir(parents=True)
+            script_path.parent.mkdir(parents=True)
+            lesson_path.write_text(
+                json.dumps({"kind": "lesson", "sections": [{"heading": "Hook"}]}),
+                encoding="utf-8",
+            )
+            script_path.write_text(
+                json.dumps({"kind": "script", "production_script": "# Script"}),
+                encoding="utf-8",
+            )
+            repository = EpisodeRepository()
+            repository.save(
+                Episode(
+                    "episode-content",
+                    Topic("A topic", "systems"),
+                    EpisodeStatus.PROCESSING,
+                    1,
+                    lesson_uri=str(lesson_path),
+                    script_uri=str(script_path),
+                )
+            )
+            server = create_review_server(
+                repository, port=0, review_token="token", media_root=root
+            )
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            connection = HTTPConnection("127.0.0.1", server.server_port)
+            headers = {"Authorization": "Bearer token"}
+            connection.request("GET", "/episodes/episode-content", headers=headers)
+            episode_body = json.loads(connection.getresponse().read())
+            self.assertEqual(
+                episode_body["artifacts"]["lesson"],
+                "/episodes/episode-content/lesson",
+            )
+            self.assertEqual(
+                episode_body["artifacts"]["script"],
+                "/episodes/episode-content/script",
+            )
+            connection.request(
+                "GET", "/episodes/episode-content/lesson", headers=headers
+            )
+            self.assertEqual(
+                json.loads(connection.getresponse().read())["kind"], "lesson"
+            )
+            connection.request(
+                "GET", "/episodes/episode-content/script", headers=headers
+            )
+            self.assertEqual(
+                json.loads(connection.getresponse().read())["kind"], "script"
+            )
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+            repository.close()
+
     def test_media_route_rejects_paths_outside_configured_storage(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             media_root = Path(directory) / "media"

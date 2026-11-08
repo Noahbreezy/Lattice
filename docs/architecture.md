@@ -105,6 +105,11 @@ or time ranges. Rejected work is
 inserted ahead of untouched queued work, while the original video artifact and
 revision remain auditable. Approved videos remain in private storage with a
 stable artifact reference until the owner uploads them.
+Each episode revision also stores a structured lesson and production script as
+private JSON artifacts. Episode API responses advertise authenticated artifact
+URLs, allowing a future frontend to display lesson sections, claims, sources,
+visual directions, timing, and the formatted production script without parsing
+Markdown or reading server filesystem paths.
 The local API also serves a minimal review page at `/app`; it is intentionally
 not a production authentication or media-serving implementation.
 
@@ -153,9 +158,10 @@ pipeline contracts.
 
 Episode and review persistence is available through
 [`src/lattice/persistence.py`](../src/lattice/persistence.py). It stores episode
-status, private video references, queue priority, rejection feedback, and
-immutable reviews in SQLite. Rejected episodes receive a lower queue priority,
-so `claim_next()` returns them before untouched work. The adapter is local
+status, private video, lesson, and script references, queue priority, rejection
+feedback, and immutable reviews in SQLite. Rejected episodes receive a lower
+queue priority, so `claim_next()` returns them before untouched work. The
+adapter is local
 development infrastructure; production should provide the same domain API
 using PostgreSQL transactions and a connection pool. It also provides
 idempotent durable jobs with attempt counts and retry/dead-letter transitions,

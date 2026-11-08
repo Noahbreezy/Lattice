@@ -57,6 +57,8 @@ class ReviewQueue:
             revision=episode.revision,
             final_video_uri=final_video_uri,
             created_at=episode.created_at or now_utc(),
+            lesson_uri=episode.lesson_uri,
+            script_uri=episode.script_uri,
         )
         return updated
 
@@ -92,6 +94,8 @@ class ReviewQueue:
             revision=episode.revision + (1 if decision == ReviewDecision.REJECT else 0),
             final_video_uri=episode.final_video_uri,
             created_at=episode.created_at or now_utc(),
+            lesson_uri=episode.lesson_uri,
+            script_uri=episode.script_uri,
         )
         self._reviews.append(review)
         if decision == ReviewDecision.REJECT:

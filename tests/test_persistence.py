@@ -1,3 +1,4 @@
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -24,6 +25,48 @@ class EpisodeRepositoryTests(unittest.TestCase):
             self.assertEqual(persisted.topic, episode.topic)
             self.assertEqual(persisted.status, episode.status)
             self.assertGreater(len(persisted.created_at), 0)
+            repository.close()
+
+    def test_round_trips_lesson_and_script_artifact_references(self) -> None:
+        episode = Episode(
+            "episode-content",
+            self.topic,
+            EpisodeStatus.PROCESSING,
+            1,
+            lesson_uri="private://lesson.json",
+            script_uri="private://script.json",
+        )
+        self.repository.save(episode)
+        persisted = self.repository.get(episode.id)
+        self.assertEqual(persisted.lesson_uri, "private://lesson.json")
+        self.assertEqual(persisted.script_uri, "private://script.json")
+
+    def test_existing_episode_database_adds_content_artifact_columns(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "legacy.sqlite"
+            connection = sqlite3.connect(database)
+            connection.execute(
+                """
+                CREATE TABLE episodes (
+                  id TEXT PRIMARY KEY, topic_title TEXT NOT NULL,
+                  subject_area TEXT NOT NULL, status TEXT NOT NULL,
+                  revision INTEGER NOT NULL, final_video_uri TEXT NOT NULL DEFAULT '',
+                  created_at TEXT NOT NULL, queue_priority INTEGER,
+                  queue_feedback TEXT NOT NULL DEFAULT ''
+                )
+                """
+            )
+            connection.commit()
+            connection.close()
+            repository = EpisodeRepository(database)
+            columns = {
+                row["name"]
+                for row in repository._connection.execute(
+                    "PRAGMA table_info(episodes)"
+                )
+            }
+            self.assertIn("lesson_uri", columns)
+            self.assertIn("script_uri", columns)
             repository.close()
 
     def test_claiming_queue_is_persistent_and_atomic(self) -> None:

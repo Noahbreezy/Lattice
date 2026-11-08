@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,6 +31,16 @@ class LocalObjectStorage:
         destination = self.root / key
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source_path, destination)
+        return self.describe(key)
+
+    def put_json(self, key: str, value: object) -> StoredObject:
+        """Store a UTF-8 JSON document suitable for API and frontend clients."""
+
+        destination = self.root / key
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(
+            json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         return self.describe(key)
 
     def describe(self, key: str) -> StoredObject:
