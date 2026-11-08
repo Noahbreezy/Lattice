@@ -83,13 +83,16 @@ class PipelineTests(unittest.TestCase):
             ),
         )
 
-    def test_production_bundle_allocates_exact_target_duration(self) -> None:
+    def test_production_bundle_uses_script_duration_below_maximum(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             history = LessonHistory(Path(directory) / "history.json")
             bundle = build_production_bundle(self.config, history, offline=True)
             self.assertEqual(
                 sum(scene.duration_seconds for scene in bundle.storyboard.scenes),
-                self.config.video_length_seconds,
+                bundle.draft.script.estimated_duration_seconds,
+            )
+            self.assertLess(
+                sum(scene.duration_seconds for scene in bundle.storyboard.scenes), 180
             )
 
     def test_storyboard_emits_provider_ready_timed_scene_prompts(self) -> None:

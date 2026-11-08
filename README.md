@@ -76,8 +76,13 @@ create a new project. Keep the top-level sections stable:
 
 - `project`: identity and description.
 - `content`: format, prompt, lesson structure, subject areas, and learning rules.
-- `production`: target duration, repeatable style traits, ordered workflow, and
+- `production`: strict duration ceiling, repeatable style traits, ordered workflow, and
   tool capabilities.
+
+`max_video_length_seconds` is an upper bound, not a target. The included project
+sets it to 179 so every finished video is under three minutes. Scripts and
+storyboards derive their actual runtime from the amount of narration needed for
+a clear explanation; content is never padded to reach the ceiling.
 
 Tool entries describe capabilities rather than hard-coding a vendor API. This
 keeps a project portable: integrations can later map a capability such as

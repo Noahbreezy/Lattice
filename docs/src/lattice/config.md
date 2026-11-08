@@ -6,8 +6,9 @@ validated immutable `ProjectConfig` and `RetentionSettings` values.
 ## Validation rules
 
 `project`, `content`, and `production` must be objects. Required strings and
-string arrays must be non-empty. Video length is an integer from 1 through
-3600 seconds. Topic seeds, AI tools, and retention limits have dedicated
+string arrays must be non-empty. `max_video_length_seconds` is an integer from
+1 through 179, enforcing the under-three-minute format. It is a maximum rather
+than a requested runtime. Topic seeds, AI tools, and retention limits have dedicated
 shape checks; retention values are non-negative integers or `null`.
 
 `load_config` reads UTF-8 JSON and turns missing files, malformed JSON, and

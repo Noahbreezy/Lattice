@@ -34,9 +34,6 @@ class ProductionTests(unittest.TestCase):
                 FfmpegRenderer(Path(directory) / "render"),
                 repository,
                 storage,
-                expected_duration=sum(
-                    scene.duration_seconds for scene in bundle.storyboard.scenes
-                ),
             )
             self.assertEqual(result.status, EpisodeStatus.AWAITING_REVIEW)
             self.assertTrue(Path(result.final_video_uri).is_file())

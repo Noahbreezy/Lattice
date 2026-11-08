@@ -41,6 +41,20 @@ class TtsTests(unittest.TestCase):
         )
         self.assertEqual(reconciled.version, storyboard.version + 1)
 
+    def test_reconcile_storyboard_rejects_narration_over_maximum(self) -> None:
+        storyboard = Storyboard(
+            (StoryboardScene("one", "One", "one two", "visual one", 8),),
+            maximum_duration_seconds=8,
+        )
+        narration = Narration(
+            "narration.wav",
+            8.6,
+            _proportional_timings(["one", "two"], 8.6),
+            "test",
+        )
+        with self.assertRaisesRegex(ValueError, "duration exceeds"):
+            reconcile_storyboard_timing(storyboard, narration)
+
     def test_windows_tts_rejects_empty_text_explicitly(self) -> None:
         with (
             tempfile.TemporaryDirectory() as directory,

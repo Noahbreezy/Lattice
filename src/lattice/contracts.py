@@ -269,6 +269,7 @@ class Storyboard:
     scenes: tuple[StoryboardScene, ...]
     version: int = 1
     provenance: ArtifactProvenance | None = None
+    maximum_duration_seconds: int | None = None
 
     def __post_init__(self) -> None:
         if not self.scenes:
@@ -277,6 +278,22 @@ class Storyboard:
             raise ConfigError("storyboard.version must be positive.")
         if len({scene.scene_id for scene in self.scenes}) != len(self.scenes):
             raise ConfigError("storyboard scene IDs must be unique.")
+        if self.maximum_duration_seconds is not None:
+            if (
+                not isinstance(self.maximum_duration_seconds, int)
+                or isinstance(self.maximum_duration_seconds, bool)
+                or self.maximum_duration_seconds < 1
+            ):
+                raise ConfigError(
+                    "storyboard.maximum_duration_seconds must be positive."
+                )
+            if (
+                sum(scene.duration_seconds for scene in self.scenes)
+                > self.maximum_duration_seconds
+            ):
+                raise ConfigError(
+                    "storyboard duration exceeds storyboard.maximum_duration_seconds."
+                )
 
 
 @dataclass(frozen=True)

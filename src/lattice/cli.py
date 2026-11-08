@@ -37,7 +37,8 @@ def main() -> int:
 
     print(
         f"Valid configuration: {config.name} "
-        f"({config.video_length_seconds}s, {len(config.workflow)} workflow stages)"
+        f"(under 180s; {config.max_video_length_seconds}s maximum, "
+        f"{len(config.workflow)} workflow stages)"
     )
     return 0
 
@@ -148,7 +149,6 @@ def run_local_main() -> int:
             renderer,
             repository,
             LocalObjectStorage(artifact_dir / "review-media"),
-            expected_duration=config.video_length_seconds,
         )
         # Persist the materialized explanatory SVGs, not the pre-render
         # placeholder manifest, for local inspection and review tooling.

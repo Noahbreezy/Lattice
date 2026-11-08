@@ -33,6 +33,7 @@ def check_media(
     path: str | Path,
     expected_duration: int | None = None,
     tolerance_seconds: float = 1.0,
+    maximum_duration: int | None = None,
 ) -> MediaReport:
     """Validate existence, stream presence, vertical dimensions, and duration."""
 
@@ -96,6 +97,13 @@ def check_media(
         issues.append(
             MediaIssue(
                 "duration", f"Expected about {expected_duration}s, got {duration:.2f}s."
+            )
+        )
+    if maximum_duration is not None and duration >= maximum_duration + 1:
+        issues.append(
+            MediaIssue(
+                "maximum-duration",
+                f"Video must stay under {maximum_duration + 1}s; got {duration:.2f}s.",
             )
         )
     metrics = (

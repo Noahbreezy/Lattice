@@ -24,7 +24,11 @@ def render_episode_for_review(
     if episode.status != EpisodeStatus.PROCESSING:
         raise ValueError("Only processing episodes can be rendered for review.")
     video = renderer.render(bundle.render_job)
-    report = check_media(video.uri, expected_duration=expected_duration)
+    report = check_media(
+        video.uri,
+        expected_duration=expected_duration,
+        maximum_duration=bundle.storyboard.maximum_duration_seconds,
+    )
     if not report.passed:
         issues = "; ".join(f"{issue.code}: {issue.message}" for issue in report.issues)
         raise ValueError(f"Rendered media failed quality checks: {issues}")

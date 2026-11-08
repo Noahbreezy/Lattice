@@ -317,11 +317,31 @@ def build_script_from_lesson(
 def build_storyboard(config: ProjectConfig, script: Script) -> Storyboard:
     """Create the deterministic local storyboard adapter for a script."""
 
-    total_duration = config.video_length_seconds
-    base, remainder = divmod(total_duration, len(script.sections))
+    if script.estimated_duration_seconds > config.max_video_length_seconds:
+        raise ValueError(
+            "Script is too long: estimated duration must be no more than "
+            f"{config.max_video_length_seconds} seconds."
+        )
+    total_duration = max(len(script.sections), script.estimated_duration_seconds)
+    word_counts = [max(1, len(section.text.split())) for section in script.sections]
+    total_words = sum(word_counts)
+    exact_durations = [total_duration * count / total_words for count in word_counts]
+    durations = [max(1, int(value)) for value in exact_durations]
+    while sum(durations) < total_duration:
+        index = max(
+            range(len(durations)),
+            key=lambda item: exact_durations[item] - durations[item],
+        )
+        durations[index] += 1
+    while sum(durations) > total_duration:
+        index = max(
+            (item for item, duration in enumerate(durations) if duration > 1),
+            key=lambda item: durations[item] - exact_durations[item],
+        )
+        durations[index] -= 1
     scene_items = []
     for index, section in enumerate(script.sections, start=1):
-        duration = base + (1 if index <= remainder else 0)
+        duration = durations[index - 1]
         scene_items.append(
             StoryboardScene(
                 scene_id=f"scene-{index}",
@@ -343,7 +363,11 @@ def build_storyboard(config: ProjectConfig, script: Script) -> Storyboard:
         input_artifact_ids=(script_id,) if script_id else (),
         provider_model="local/deterministic",
     )
-    return Storyboard(scenes=scenes, provenance=provenance)
+    return Storyboard(
+        scenes=scenes,
+        provenance=provenance,
+        maximum_duration_seconds=config.max_video_length_seconds,
+    )
 
 
 def _visual_direction(section: ScriptSection, topic: Topic) -> str:
@@ -595,7 +619,11 @@ def regenerate_scenes(
         )
         for scene in storyboard.scenes
     )
-    return Storyboard(scenes=scenes, version=storyboard.version + 1)
+    return Storyboard(
+        scenes=scenes,
+        version=storyboard.version + 1,
+        maximum_duration_seconds=storyboard.maximum_duration_seconds,
+    )
 
 
 def record_completed_episode(draft: EpisodeDraft, history: LessonHistory) -> None:

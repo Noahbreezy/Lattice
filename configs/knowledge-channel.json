@@ -50,7 +50,7 @@
     ]
   },
   "production": {
-    "video_length_seconds": 75,
+    "max_video_length_seconds": 179,
     "traits": [
       "clear",
       "curious",

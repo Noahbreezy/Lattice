@@ -181,6 +181,7 @@ def create_configured_lesson_provider(config: ProjectConfig) -> AILessonProvider
 def _lesson_prompt(topic: Topic, config: ProjectConfig) -> str:
     sections = "\n".join(f"- {heading}" for heading in config.required_sections)
     rules = "\n".join(f"- {rule}" for rule in config.learning_rules)
+    max_words = config.max_video_length_seconds * 150 // 60
     return f"""Create a recreational educational video script about "{topic.title}" ({topic.subject_area}).
 Return JSON only with this exact shape:
 {{"summary": "...", "uncertainty": "...", "sections": [{{"heading": "...", "text": "spoken narration...", "visual_description": "standalone video-generation prompt..."}}],
@@ -190,6 +191,8 @@ step in the complete explanation:
 {sections}
 For every scene:
 - Write concise spoken narration in "text". Each scene must advance the explanation.
+- Make the complete narration only as long as needed for a clear explanation. Do not
+  pad, repeat, or slow the explanation to hit a target duration.
 - Write a specific, standalone 9:16 video-generation prompt in "visual_description".
 - Visually explain the narration instead of merely decorating it. Show the relevant
   subject, initial state, causal action or comparison, and resulting state.
@@ -198,6 +201,9 @@ For every scene:
 - Do not request baked-in captions, logos, voiceover audio, or visible prompt text.
 Style and content rules:
 {rules}
+The finished video must be shorter than 180 seconds. At an assumed narration pace
+of 150 words per minute, the complete spoken script must contain no more than
+{max_words} words; use substantially fewer whenever the topic can be explained clearly.
 Avoid invented statistics, citations, quotations, or confident claims you cannot support.
 Explain uncertainty plainly. Produce 3-8 concise claims."""
 

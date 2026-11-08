@@ -46,7 +46,7 @@ class ProjectConfig:
     description: str
     channel_name: str
     format: str
-    video_length_seconds: int
+    max_video_length_seconds: int
     lesson_prompt: str
     traits: tuple[str, ...]
     required_sections: tuple[str, ...]
@@ -72,7 +72,7 @@ class ProjectConfig:
             "description": self.description,
             "channel_name": self.channel_name,
             "format": self.format,
-            "video_length_seconds": self.video_length_seconds,
+            "max_video_length_seconds": self.max_video_length_seconds,
             "lesson_prompt": self.lesson_prompt,
             "traits": self.traits,
             "required_sections": self.required_sections,
@@ -106,14 +106,15 @@ class ProjectConfig:
         channel_name = _required_string(content, "channel_name", "content")
         format_name = _required_string(content, "format", "content")
         lesson_prompt = _required_string(content, "prompt", "content")
-        video_length_seconds = production.get("video_length_seconds")
+        max_video_length_seconds = production.get("max_video_length_seconds")
         if (
-            not isinstance(video_length_seconds, int)
-            or isinstance(video_length_seconds, bool)
-            or not 1 <= video_length_seconds <= 3600
+            not isinstance(max_video_length_seconds, int)
+            or isinstance(max_video_length_seconds, bool)
+            or not 1 <= max_video_length_seconds < 180
         ):
             raise ConfigError(
-                "production.video_length_seconds must be an integer from 1 to 3600."
+                "production.max_video_length_seconds must be an integer from 1 to "
+                "179 so every video stays under three minutes."
             )
 
         traits = _required_strings(production, "traits", "production")
@@ -130,7 +131,7 @@ class ProjectConfig:
             description=description,
             channel_name=channel_name,
             format=format_name,
-            video_length_seconds=video_length_seconds,
+            max_video_length_seconds=max_video_length_seconds,
             lesson_prompt=lesson_prompt,
             traits=traits,
             required_sections=required_sections,

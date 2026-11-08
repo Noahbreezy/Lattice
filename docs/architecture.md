@@ -50,7 +50,7 @@ succeeded job. Provider implementations remain behind capability interfaces.
 
 The first vertical slice is exposed by `build_production_bundle`: it selects a
 topic, creates research and a script, allocates storyboard scenes to exactly
-the configured target duration, creates deterministic asset references, and
+the narration-derived duration within the configured maximum, creates deterministic asset references, and
 returns a queued render job. The local renderer produces a real 9:16 MP4 and
 SRT artifact. Demo research is source-linked for Path dependence and Base
 rates, but is intentionally a fixture until a live research provider is
@@ -59,7 +59,7 @@ configured.
 The local renderer supports a zero-cost Windows SAPI TTS adapter and an
 optional Piper adapter. It produces word timing metadata, illustrated
 geometric scene slates, captions, and a padded audio track that preserves the
-requested final duration. `media_quality.py` validates the MP4 container,
+script-derived final duration. `media_quality.py` validates the MP4 container,
 audio/video stream presence, vertical dimensions, and duration.
 `IllustratedVisualProvider` emits reusable SVG scene assets, while
 `regenerate_scenes` creates a new storyboard version only for selected scenes.

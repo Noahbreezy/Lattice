@@ -43,7 +43,7 @@ def check_lesson(
     min_section_words: int = 5,
     max_section_words: int = 120,
     min_lesson_words: int = 60,
-    max_lesson_words: int = 350,
+    max_lesson_words: int | None = None,
     min_claims: int = 3,
     max_claims: int = 8,
 ) -> QualityReport:
@@ -76,6 +76,8 @@ def check_lesson(
             )
         )
     lesson_word_count = sum(section_word_counts)
+    if max_lesson_words is None:
+        max_lesson_words = config.max_video_length_seconds * 150 // 60
     if not min_lesson_words <= lesson_word_count <= max_lesson_words:
         issues.append(
             QualityIssue(
@@ -145,7 +147,6 @@ def check_script(
     config: ProjectConfig,
     research: ResearchPacket,
     script: Script,
-    duration_tolerance: float = 0.25,
 ) -> QualityReport:
     """Check structure, duration, and evidence before storyboard generation."""
 
@@ -159,13 +160,12 @@ def check_script(
                 "Script headings do not match the configured structure.",
             )
         )
-    lower_bound = config.video_length_seconds * (1 - duration_tolerance)
-    upper_bound = config.video_length_seconds * (1 + duration_tolerance)
-    if not lower_bound <= script.estimated_duration_seconds <= upper_bound:
+    if script.estimated_duration_seconds > config.max_video_length_seconds:
         issues.append(
             QualityIssue(
                 "duration",
-                f"Estimated duration must be between {lower_bound:.0f} and {upper_bound:.0f} seconds.",
+                "Estimated duration must be no more than "
+                f"{config.max_video_length_seconds} seconds (strictly under three minutes).",
             )
         )
     if script.source_claim_count != len(research.claims):
@@ -184,10 +184,9 @@ def require_script_quality(
     config: ProjectConfig,
     research: ResearchPacket,
     script: Script,
-    duration_tolerance: float = 0.25,
 ) -> None:
     """Raise a clear error when a script fails deterministic quality checks."""
 
-    report = check_script(config, research, script, duration_tolerance)
+    report = check_script(config, research, script)
     if not report.passed:
         raise ValueError("; ".join(issue.message for issue in report.issues))

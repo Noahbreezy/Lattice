@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from lattice.config import load_config
@@ -47,8 +48,20 @@ class QualityTests(unittest.TestCase):
             created_at=self.research.created_at,
         )
         script = build_script(self.config, verified, words_per_minute=60)
-        report = check_script(self.config, verified, script, duration_tolerance=1.0)
+        report = check_script(self.config, verified, script)
         self.assertTrue(report.passed)
+
+        oversized = replace(
+            script,
+            estimated_duration_seconds=self.config.max_video_length_seconds + 1,
+        )
+        self.assertIn(
+            "duration",
+            {
+                issue.code
+                for issue in check_script(self.config, verified, oversized).issues
+            },
+        )
 
     def test_lesson_quality_reports_content_risks(self) -> None:
         lesson = AILesson(

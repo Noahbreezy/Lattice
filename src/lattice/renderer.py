@@ -59,7 +59,6 @@ class FfmpegRenderer:
                     storyboard=reconcile_storyboard_timing(job.storyboard, narration),
                 )
                 duration = max(
-                    duration,
                     math.ceil(narration.duration_seconds),
                     sum(scene.duration_seconds for scene in job.storyboard.scenes),
                 )

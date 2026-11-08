@@ -4,7 +4,11 @@ from pathlib import Path
 
 from lattice.config import load_config
 from lattice.contracts import Topic
-from lattice.research import OllamaLessonProvider, create_configured_lesson_provider
+from lattice.research import (
+    OllamaLessonProvider,
+    _lesson_prompt,
+    create_configured_lesson_provider,
+)
 
 
 class _Response:
@@ -22,6 +26,15 @@ class _Response:
 
 
 class AiLessonTests(unittest.TestCase):
+    def test_prompt_sets_a_maximum_without_padding_to_it(self):
+        config = load_config(
+            Path(__file__).parents[1] / "configs" / "knowledge-channel.json"
+        )
+        prompt = _lesson_prompt(Topic("Path dependence", "systems"), config)
+        self.assertIn("shorter than 180 seconds", prompt)
+        self.assertIn("only as long as needed", prompt)
+        self.assertIn("Do not\n  pad", prompt)
+
     def test_ollama_adapter_parses_structured_json(self):
         config = load_config(
             Path(__file__).parents[1] / "configs" / "knowledge-channel.json"

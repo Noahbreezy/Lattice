@@ -11,12 +11,12 @@ class ProjectConfigTests(unittest.TestCase):
             Path(__file__).parents[1] / "configs" / "knowledge-channel.json"
         )
         self.assertEqual(config.channel_name, "A New Thing")
-        self.assertEqual(config.video_length_seconds, 75)
+        self.assertEqual(config.max_video_length_seconds, 179)
         self.assertIn("The idea", config.required_sections)
         self.assertEqual(config.retention.max_server_videos, 5)
 
     def test_rejects_invalid_video_length(self) -> None:
-        with self.assertRaisesRegex(ConfigError, "video_length_seconds"):
+        with self.assertRaisesRegex(ConfigError, "max_video_length_seconds"):
             ProjectConfig.from_mapping(
                 {
                     "project": {"name": "x", "description": "x"},
@@ -27,7 +27,7 @@ class ProjectConfigTests(unittest.TestCase):
                         "required_sections": ["x"],
                     },
                     "production": {
-                        "video_length_seconds": 0,
+                        "max_video_length_seconds": 180,
                         "traits": ["x"],
                         "workflow": ["x"],
                         "ai_tools": [],
@@ -54,7 +54,7 @@ class ProjectConfigTests(unittest.TestCase):
                 "learning_rules": ["x"],
             },
             "production": {
-                "video_length_seconds": 60,
+                "max_video_length_seconds": 179,
                 "traits": ["x"],
                 "workflow": ["x"],
                 "ai_tools": [],
@@ -76,7 +76,7 @@ class ProjectConfigTests(unittest.TestCase):
                 "learning_rules": ["x"],
             },
             "production": {
-                "video_length_seconds": 60,
+                "max_video_length_seconds": 179,
                 "traits": ["x"],
                 "workflow": ["x"],
                 "ai_tools": [],

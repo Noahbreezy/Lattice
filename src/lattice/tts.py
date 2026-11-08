@@ -88,6 +88,7 @@ def reconcile_storyboard_timing(
         scenes=scenes,
         version=storyboard.version + 1,
         provenance=storyboard.provenance,
+        maximum_duration_seconds=storyboard.maximum_duration_seconds,
     )
 
 

@@ -10,8 +10,10 @@ short-form educational channel.
 - `project` identifies the project and gives its description.
 - `content` defines the channel, format, lesson prompt, required script
   sections, subject areas, learning rules, and initial topic seeds.
-- `production` defines the 75-second target, repeatable style traits, ordered
-  workflow, provider-neutral AI capabilities, and retention limits.
+- `production` defines a 179-second maximum, repeatable style traits, ordered
+  workflow, provider-neutral AI capabilities, and retention limits. This is a
+  ceiling rather than a target: each script should be only as long as its clear
+  explanation requires, and every finished video must remain under three minutes.
 
 AI tool entries describe capabilities, not implementation dependencies. A
 provider may be absent (`null`) when an integration has not been selected.

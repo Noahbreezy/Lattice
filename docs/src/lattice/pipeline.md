@@ -32,6 +32,9 @@ check script structure, duration, and claim coverage.
 `build_research_packet` currently creates a clearly unverified placeholder
 source and claim. `build_script` creates one section per configured required
 section and estimates duration from word count at a configurable speaking rate.
+The storyboard uses that estimate, distributed in proportion to each section's
+narration, instead of padding scenes to the configured maximum. Oversized scripts
+are rejected before production.
 
 `create_episode_draft` composes these steps and reserves the topic before
 production begins. `record_completed_episode` remains idempotent for

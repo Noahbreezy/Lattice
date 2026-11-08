@@ -81,11 +81,14 @@ class RendererTests(unittest.TestCase):
         manifest = build_asset_manifest(storyboard)
         job = create_render_job(storyboard, manifest)
         with tempfile.TemporaryDirectory() as directory:
-            video = FfmpegRenderer(directory, tts_provider=FixtureTts()).render(job)
+            renderer = FfmpegRenderer(directory, tts_provider=FixtureTts())
+            video = renderer.render(job)
             self.assertTrue(Path(video.uri).exists())
             self.assertGreater(Path(video.uri).stat().st_size, 0)
             self.assertEqual(len(tuple(Path(directory).glob("*.srt"))), 1)
-            report = check_media(
-                video.uri, expected_duration=config.video_length_seconds
+            self.assertIsNotNone(renderer.last_job)
+            expected_duration = sum(
+                scene.duration_seconds for scene in renderer.last_job.storyboard.scenes
             )
+            report = check_media(video.uri, expected_duration=expected_duration)
             self.assertTrue(report.passed, report.issues)
