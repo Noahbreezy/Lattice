@@ -62,21 +62,20 @@
     ],
     "workflow": [
       "select topic",
-      "research and source claims",
-      "write lesson",
-      "review for accuracy and uncertainty",
-      "create visual plan",
-      "generate assets",
-      "assemble and caption video",
-      "human quality review",
-      "publish and record lesson history"
+      "generate structured lesson and script",
+      "run lesson and script quality checks",
+      "create storyboard and local visual assets",
+      "render and caption video",
+      "validate rendered media",
+      "store private review artifacts",
+      "human quality review and revision"
     ],
     "ai_tools": [
       {
         "name": "research assistant",
         "purpose": "Find and summarize authoritative sources; never publish unsupported claims.",
         "provider": null,
-        "required": true
+        "required": false
       },
       {
         "name": "script model",
@@ -91,6 +90,12 @@
         "purpose": "Generate each timed explanatory scene from its standalone visual prompt and narration sync plan.",
         "provider": "higgsfield",
         "required": false
+      },
+      {
+        "name": "narration",
+        "purpose": "Speak the final script with timed word alignment.",
+        "provider": "windows-sapi",
+        "required": true
       },
       {
         "name": "editor",

@@ -31,7 +31,7 @@ The contracts live in [`src/lattice/contracts.py`](../src/lattice/contracts.py).
 stricter than storing a source list beside a script: later review can identify
 which evidence supports each claim.
 
-The next planned stages are:
+The artifact chain is:
 
 ```text
 Script
@@ -41,7 +41,7 @@ Script
   -> PublishedVideo
 ```
 
-The local development adapter now emits these contracts deterministically.
+The local development adapter emits these contracts deterministically.
 Every artifact carries a version and provenance metadata including configuration
 hash, prompt version, provider/model identifier, input artifact IDs, content
 hash, UTC timestamps, and approval state where applicable. Render jobs only
@@ -55,6 +55,17 @@ returns a queued render job. The local renderer produces a real 9:16 MP4 and
 SRT artifact. Demo research is source-linked for Path dependence and Base
 rates, but is intentionally a fixture until a live research provider is
 configured.
+
+The local production runner uses the configured lesson provider by default,
+then runs quality checks, creates local visuals, renders and checks media,
+stores the private video and structured artifacts, and enters the review queue.
+On rejection it consumes the saved review in a new revision; the Ollama adapter
+includes feedback, criteria, and timestamped markers in its generation prompt.
+Each revision has separate video and artifact paths. The runner validates the
+configured workflow order and required provider capabilities. The configured
+brief and traits enter lesson and visual prompts, and narration selects Windows
+SAPI or Piper. Automated gates check evidence labels, final audio, and motion;
+factual verification still depends on external sources and human review.
 
 The local renderer supports a zero-cost Windows SAPI TTS adapter and an
 optional Piper adapter. It produces word timing metadata, illustrated
@@ -76,8 +87,8 @@ generation endpoint. It converts the model response into a structured
 `AILesson`, then into the existing research and script contracts. A model response
 is rejected if any logical section lacks a substantive visual description. The
 canonical production script is built from the timed storyboard rather than by
-printing lesson prose: each scene includes narration, a self-contained Higgsfield
-visual prompt with the shared style bible, and contiguous synchronized beats.
+printing lesson prose: each scene includes narration, a self-contained visual
+prompt using the configured traits, and contiguous synchronized beats.
 `build_production_bundle` selects this configured provider by default.
 Deterministic demo research is reserved for explicit `offline=True` calls in
 tests and offline development.
@@ -110,17 +121,21 @@ private JSON artifacts. Episode API responses advertise authenticated artifact
 URLs, allowing a future frontend to display lesson sections, claims, sources,
 visual directions, timing, and the formatted production script without parsing
 Markdown or reading server filesystem paths.
-The local API also serves a minimal review page at `/app`; it is intentionally
-not a production authentication or media-serving implementation.
+The server adapter uses PostgreSQL for queue and review state and private
+S3-compatible storage for media and artifacts. It serves the mobile page at
+`/app` and requires a bearer token for all API and media routes. Deploy it
+behind an HTTPS reverse proxy with identity-based access control.
 
 The domain rules are represented by [`src/lattice/review.py`](../src/lattice/review.py)
 and the lifecycle contracts in
-[`src/lattice/contracts.py`](../src/lattice/contracts.py). The current queue is
-in-memory for testing; production persistence belongs in PostgreSQL.
+[`src/lattice/contracts.py`](../src/lattice/contracts.py). SQLite backs local
+review state; PostgreSQL backs the server adapter.
 
 ## Authentication and security boundary
 
-The future web app must be private by default:
+The server entry point requires a bearer token on API and media routes and
+keeps the S3 bucket private. A public deployment also needs an authenticating
+TLS reverse proxy and operational controls:
 
 - Require authentication for every API route and media download.
 - Use a managed identity provider or a mature OIDC implementation; do not
@@ -129,7 +144,7 @@ The future web app must be private by default:
 - Enforce server-side authorization on every episode, review, and asset request;
   hiding UI controls is not authorization.
 - Keep object storage private and issue short-lived signed URLs only after an
-  authorized request.
+  authorized request, or stream through the authenticated API as this adapter does.
 - Store provider credentials in a server-side secret manager, never in browser
   code or project configuration committed to Git.
 - Add CSRF protection for cookie-authenticated state-changing requests, HTTPS,
@@ -153,17 +168,16 @@ production.
 Lesson history is stored in a small JSON file through
 [`src/lattice/history.py`](../src/lattice/history.py). Topic keys are normalized
 before comparison, so punctuation and capitalization do not create false
-novelty. This store will later be replaced by PostgreSQL without changing the
-pipeline contracts.
+novelty. The worker still uses this file for topic selection; shared workers
+need a database-backed topic reservation before horizontal scaling.
 
 Episode and review persistence is available through
 [`src/lattice/persistence.py`](../src/lattice/persistence.py). It stores episode
 status, private video, lesson, and script references, queue priority, rejection
 feedback, and immutable reviews in SQLite. Rejected episodes receive a lower
 queue priority, so `claim_next()` returns them before untouched work. The
-adapter is local
-development infrastructure; production should provide the same domain API
-using PostgreSQL transactions and a connection pool. It also provides
+PostgreSQL adapter in [`src/lattice/postgres.py`](../src/lattice/postgres.py)
+implements the same domain API with transactions and row locking. It also provides
 idempotent durable jobs with attempt counts and retry/dead-letter transitions,
 which can back an initial worker implementation.
 

@@ -22,10 +22,12 @@ class LocalWorker:
         self.handlers = handlers
         self.max_attempts = max_attempts
 
-    def run_once(self, kind: str | None = None) -> Job | None:
+    def run_once(
+        self, kind: str | None = None, job_id: str | None = None
+    ) -> Job | None:
         self.repository.recover_stale_jobs()
         try:
-            job = self.repository.claim_job(kind)
+            job = self.repository.claim_job(kind, job_id)
         except LookupError:
             return None
         handler = self.handlers.get(job.kind)

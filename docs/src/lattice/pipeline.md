@@ -23,9 +23,9 @@ result beats whose time ranges cover the full scene, so a video provider can
 generate explanatory motion in sync with the voice track.
 `format_production_script` serializes that storyboard into the canonical
 human-readable script: one timed scene per logical section, with explicit
-narration, a standalone Higgsfield prompt, and proportional beat timing. Every
-prompt repeats the project style bible and continuity rules so scenes can be
-generated independently without drifting in palette, rendering style, or subject.
+narration, a standalone provider-neutral visual prompt, and proportional beat
+timing. Every prompt carries the configured project brief and traits so scenes
+can be generated independently with consistent subjects and style.
 
 `ResearchProvider` in `research.py` is the boundary for a real source
 retrieval integration. `validate_research` and the quality checks in

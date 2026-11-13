@@ -1,8 +1,11 @@
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 from lattice.config import ConfigError, ProjectConfig, load_config
+from lattice.runner import _configured_renderer, _validate_local_capabilities
 
 
 class ProjectConfigTests(unittest.TestCase):
@@ -14,6 +17,47 @@ class ProjectConfigTests(unittest.TestCase):
         self.assertEqual(config.max_video_length_seconds, 179)
         self.assertIn("The idea", config.required_sections)
         self.assertEqual(config.retention.max_server_videos, 5)
+        _validate_local_capabilities(config, offline=False)
+
+    def test_runner_rejects_unavailable_required_provider_and_workflow(self) -> None:
+        config = load_config(
+            Path(__file__).parents[1] / "configs" / "knowledge-channel.json"
+        )
+        tools = tuple(
+            {**tool, "required": True} if tool["name"] == "video generator" else tool
+            for tool in config.ai_tools
+        )
+        with self.assertRaisesRegex(ValueError, "video generator"):
+            _validate_local_capabilities(replace(config, ai_tools=tools), offline=False)
+        with self.assertRaisesRegex(ValueError, "workflow"):
+            _validate_local_capabilities(
+                replace(config, workflow=("render and caption video",)), offline=False
+            )
+
+    def test_configured_visual_adapter_reaches_renderer(self) -> None:
+        config = load_config(
+            Path(__file__).parents[1] / "configs" / "knowledge-channel.json"
+        )
+        tools = tuple(
+            {**tool, "provider": "custom", "required": True}
+            if tool["name"] == "video generator"
+            else tool
+            for tool in config.ai_tools
+        )
+        custom = replace(config, ai_tools=tools)
+        visual = object()
+        with patch(
+            "lattice.runner.provider_factory",
+            side_effect=lambda capability, name: (
+                (lambda *_: visual)
+                if (capability, name) == ("visual", "custom")
+                else None
+            ),
+        ):
+            _validate_local_capabilities(custom, offline=False)
+            self.assertIs(
+                _configured_renderer(custom, Path("var/test")).visual_provider, visual
+            )
 
     def test_rejects_invalid_video_length(self) -> None:
         with self.assertRaisesRegex(ConfigError, "max_video_length_seconds"):

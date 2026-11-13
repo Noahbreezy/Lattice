@@ -8,7 +8,7 @@ from .contracts import Episode, EpisodeStatus
 from .media_quality import check_media
 from .persistence import EpisodeRepository
 from .pipeline import ProductionBundle, RenderProvider, format_production_script
-from .storage import LocalObjectStorage
+from .storage import ObjectStorage
 
 
 def render_episode_for_review(
@@ -16,7 +16,7 @@ def render_episode_for_review(
     episode: Episode,
     renderer: RenderProvider,
     repository: EpisodeRepository,
-    storage: LocalObjectStorage,
+    storage: ObjectStorage,
     expected_duration: int | None = None,
 ) -> Episode:
     """Render, validate, persist, and submit one processing episode for review."""
@@ -24,16 +24,45 @@ def render_episode_for_review(
     if episode.status != EpisodeStatus.PROCESSING:
         raise ValueError("Only processing episodes can be rendered for review.")
     video = renderer.render(bundle.render_job)
+    materialized = getattr(renderer, "last_job", None)
+    if expected_duration is None and materialized is not None:
+        expected_duration = sum(
+            scene.duration_seconds for scene in materialized.storyboard.scenes
+        )
+    validate_rendered_video(bundle, video.uri, expected_duration)
+    return store_rendered_episode(bundle, episode, video.uri, repository, storage)
+
+
+def validate_rendered_video(
+    bundle: ProductionBundle, video_uri: str, expected_duration: int | None = None
+) -> None:
+    """Block malformed, frozen, or inaudible final media."""
+
     report = check_media(
-        video.uri,
+        video_uri,
         expected_duration=expected_duration,
         maximum_duration=bundle.storyboard.maximum_duration_seconds,
+        require_motion=True,
+        require_audible=True,
+        require_captions=True,
     )
     if not report.passed:
         issues = "; ".join(f"{issue.code}: {issue.message}" for issue in report.issues)
         raise ValueError(f"Rendered media failed quality checks: {issues}")
 
-    source = Path(video.uri)
+
+def store_rendered_episode(
+    bundle: ProductionBundle,
+    episode: Episode,
+    video_uri: str,
+    repository: EpisodeRepository,
+    storage: ObjectStorage,
+) -> Episode:
+    """Store a validated revision and submit it to the review queue."""
+
+    if episode.status != EpisodeStatus.PROCESSING:
+        raise ValueError("Only processing episodes can be stored for review.")
+    source = Path(video_uri)
     revision_name = f"revision-{episode.revision}"
     video_key = f"videos/{episode.id}/revision-{episode.revision}.mp4"
     stored_video = storage.put_file(video_key, source)

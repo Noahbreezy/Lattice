@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -34,8 +35,11 @@ def check_media(
     expected_duration: int | None = None,
     tolerance_seconds: float = 1.0,
     maximum_duration: int | None = None,
+    require_motion: bool = False,
+    require_audible: bool = False,
+    require_captions: bool = False,
 ) -> MediaReport:
-    """Validate existence, stream presence, vertical dimensions, and duration."""
+    """Validate streams, format, duration, and optional production signal gates."""
 
     media = Path(path)
     issues: list[MediaIssue] = []
@@ -106,12 +110,34 @@ def check_media(
                 f"Video must stay under {maximum_duration + 1}s; got {duration:.2f}s.",
             )
         )
-    metrics = (
-        measure_animation(media)
-        if not issues
-        or not any(issue.code in {"missing-video", "wrong-format"} for issue in issues)
-        else None
-    )
+    metrics = measure_animation(media) if video is not None else None
+    if (
+        require_motion
+        and video is not None
+        and metrics is not None
+        and (metrics.get("sample_count", 0) < 2 or metrics.get("max_abs_diff", 0) == 0)
+    ):
+        issues.append(MediaIssue("frozen-video", "Video frames show no motion."))
+    if require_audible and audio is not None:
+        peak_db = measure_audio_peak(media)
+        if peak_db is None or peak_db < -50:
+            issues.append(
+                MediaIssue("inaudible-audio", "Final audio is silent or too quiet.")
+            )
+        if metrics is not None:
+            metrics["audio_peak_db"] = peak_db
+    if require_captions:
+        subtitle = media.with_suffix(".srt")
+        try:
+            caption_text = (
+                subtitle.read_text(encoding="utf-8") if subtitle.is_file() else ""
+            )
+        except (OSError, UnicodeError):
+            caption_text = ""
+        if not caption_text.strip():
+            issues.append(
+                MediaIssue("missing-captions", "Final subtitles are missing or empty.")
+            )
     return MediaReport(
         tuple(issues),
         metrics,
@@ -119,6 +145,35 @@ def check_media(
         video.get("height") if video else None,
         audio is not None,
     )
+
+
+def measure_audio_peak(path: str | Path) -> float | None:
+    """Measure peak volume after final muxing; return None on decode failure."""
+
+    completed = subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "info",
+            "-i",
+            str(path),
+            "-vn",
+            "-af",
+            "volumedetect",
+            "-f",
+            "null",
+            "-",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        return None
+    match = re.search(r"max_volume:\s*(-?(?:\d+(?:\.\d+)?|inf)) dB", completed.stderr)
+    if match is None:
+        return None
+    return float(match.group(1))
 
 
 def measure_animation(path: str | Path, *, max_samples: int = 32) -> dict[str, object]:

@@ -10,7 +10,16 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-from .contracts import Claim, ResearchPacket, ScriptSection, Source, Topic, now_utc
+from .contracts import (
+    Claim,
+    ResearchPacket,
+    Review,
+    ScriptSection,
+    Source,
+    Topic,
+    now_utc,
+)
+from .providers import provider_factory
 
 if TYPE_CHECKING:
     from .config import ProjectConfig
@@ -33,6 +42,7 @@ class AILesson:
     claims: tuple[Claim, ...]
     uncertainty: str
     provider_model: str
+    reference_sources: tuple[Source, ...] = ()
 
     def to_research_packet(self) -> ResearchPacket:
         """Adapt model output to the existing evidence-aware pipeline contract."""
@@ -45,7 +55,7 @@ class AILesson:
         return ResearchPacket(
             topic=self.topic,
             summary=self.summary,
-            sources=(source,),
+            sources=(source, *self.reference_sources),
             claims=tuple(
                 Claim(
                     statement=claim.statement,
@@ -84,8 +94,93 @@ class OllamaLessonProvider:
         self.opener = opener
 
     def generate_lesson(self, topic: Topic, config: ProjectConfig) -> AILesson:
+        return self._generate(topic, config, "")
+
+    def generate_revision(
+        self, topic: Topic, config: ProjectConfig, review: Review
+    ) -> AILesson:
+        """Regenerate the lesson using the saved rejection context."""
+
+        context = json.dumps(
+            {
+                "feedback": review.feedback,
+                "criteria": review.criteria,
+                "markers": [
+                    {
+                        "start_seconds": marker.start_seconds,
+                        "end_seconds": marker.end_seconds,
+                        "criterion": marker.criterion,
+                        "comment": marker.comment,
+                    }
+                    for marker in review.markers
+                ],
+            },
+            ensure_ascii=False,
+        )
+        return self._generate(topic, config, context)
+
+    def generate_grounded_lesson(
+        self,
+        topic: Topic,
+        config: ProjectConfig,
+        packet: ResearchPacket,
+        review: Review | None = None,
+    ) -> AILesson:
+        """Supply retrieved sources as context without claiming fact verification."""
+
+        context = json.dumps(
+            {
+                "research_summary": packet.summary,
+                "sources": [
+                    {"title": item.title, "citation": item.citation, "url": item.url}
+                    for item in packet.sources
+                ],
+                "review": {
+                    "feedback": review.feedback,
+                    "criteria": review.criteria,
+                    "markers": [
+                        {
+                            "start_seconds": marker.start_seconds,
+                            "end_seconds": marker.end_seconds,
+                            "criterion": marker.criterion,
+                            "comment": marker.comment,
+                        }
+                        for marker in review.markers
+                    ],
+                }
+                if review is not None
+                else None,
+            },
+            ensure_ascii=False,
+        )
+        lesson = self._generate(
+            topic,
+            config,
+            "Ground the explanation in this context; "
+            "keep claims labelled model-generated until verified:\n" + context,
+        )
+        return AILesson(
+            lesson.topic,
+            lesson.summary,
+            lesson.sections,
+            lesson.claims,
+            lesson.uncertainty,
+            lesson.provider_model,
+            packet.sources,
+        )
+
+    def _generate(
+        self, topic: Topic, config: ProjectConfig, revision_context: str
+    ) -> AILesson:
         required = list(config.required_sections)
         prompt = _lesson_prompt(topic, config)
+        if revision_context:
+            prompt += (
+                "\nThis is a rejected revision. Address all reviewer feedback, criteria, "
+                "and timestamped markers in the new narration and visual plan. "
+                "Preserve the required JSON shape and quality rules.\n"
+                + revision_context
+            )
         request = Request(
             self.endpoint,
             data=json.dumps(
@@ -186,7 +281,10 @@ def create_configured_lesson_provider(config: ProjectConfig) -> AILessonProvider
     )
     provider = str(tool.get("provider") or "ollama").strip().lower()
     if provider != "ollama":
-        raise ValueError(f"Unsupported lesson provider: {provider}")
+        factory = provider_factory("lesson", provider)
+        if factory is None:
+            raise ValueError(f"Unsupported lesson provider: {provider}")
+        return factory(config, tool)
     model = str(tool.get("model") or "qwen3:4b").strip()
     endpoint = str(
         tool.get("endpoint") or "http://127.0.0.1:11434/api/generate"
@@ -194,11 +292,38 @@ def create_configured_lesson_provider(config: ProjectConfig) -> AILessonProvider
     return OllamaLessonProvider(model=model, endpoint=endpoint)
 
 
+def create_configured_research_provider(
+    config: ProjectConfig,
+) -> ResearchProvider | None:
+    tool = next(
+        (
+            item
+            for item in config.ai_tools
+            if str(item.get("name", "")).strip().lower() == "research assistant"
+        ),
+        {},
+    )
+    name = str(tool.get("provider") or "").strip().lower()
+    if not name:
+        if tool.get("required"):
+            raise ValueError("A required research assistant needs a provider.")
+        return None
+    if name == "wikipedia":
+        return WikipediaResearchProvider()
+    factory = provider_factory("research", name)
+    if factory is None:
+        raise ValueError(f"Unsupported research provider: {name}")
+    return factory(config, tool)
+
+
 def _lesson_prompt(topic: Topic, config: ProjectConfig) -> str:
     sections = "\n".join(f"- {heading}" for heading in config.required_sections)
     rules = "\n".join(f"- {rule}" for rule in config.learning_rules)
+    traits = "\n".join(f"- {trait}" for trait in config.traits)
     max_words = config.max_video_length_seconds * 150 // 60
-    return f"""Create a recreational educational video production plan about "{topic.title}" ({topic.subject_area}).
+    return f"""Project brief: {config.lesson_prompt}
+Channel: {config.channel_name}. Format: {config.format}.
+Create a video production plan about "{topic.title}" ({topic.subject_area}).
 Return JSON only with this exact shape:
 {{"summary": "...", "uncertainty": "...", "sections": [{{"heading": "...", "text": "spoken narration...", "visual_description": "standalone video-generation prompt..."}}],
 "claims": [{{"statement": "...", "evidence_level": "model-generated", "uncertainty": "..."}}]}}
@@ -214,16 +339,17 @@ For every scene:
   subject, initial state, causal action or comparison, and resulting state.
 - Specify setting, composition, camera behavior, subject motion, explanatory graphic
   motion, and the transition into the next logical step. Keep continuity across scenes.
-- Make every visual description at least 25 words and detailed enough to paste into
-  Higgsfield without relying on the narration or any other scene for context.
-- Use the same recurring subjects, visual motifs, physical environment, lighting, and
-  palette across all scenes: premium cinematic editorial animation, deep navy, warm
-  amber, and parchment, with soft directional light and restrained translucent
-  explanatory overlays. Do not introduce a different palette or rendering style.
+- Make every visual description at least 25 words and usable by a video or
+  illustration provider without relying on another scene for context.
+- Keep recurring subjects, visual motifs, environment, lighting, and palette
+  consistent across scenes. Follow the configured traits rather than inventing
+  a new house style.
 - Do not request baked-in captions, logos, voiceover audio, or visible prompt text.
-Style and content rules:
+Configured traits:
+{traits}
+Learning rules:
 {rules}
-The finished video must be shorter than 180 seconds. At an assumed narration pace
+The finished video must be no longer than {config.max_video_length_seconds} seconds. At an assumed narration pace
 of 150 words per minute, the complete spoken script must contain no more than
 {max_words} words; use substantially fewer whenever the topic can be explained clearly.
 Avoid invented statistics, citations, quotations, or confident claims you cannot support.
@@ -290,6 +416,24 @@ def validate_research(packet: ResearchPacket) -> tuple[ResearchIssue, ...]:
 
     issues: list[ResearchIssue] = []
     for index, claim in enumerate(packet.claims):
+        sources = tuple(packet.sources[item] for item in claim.source_indices)
+        if any(source.source_type == "ai-generated" for source in sources):
+            if claim.evidence_level.strip().lower() != "model-generated":
+                issues.append(
+                    ResearchIssue(
+                        "unsupported-evidence-label",
+                        "An AI-generated source cannot verify a claim.",
+                        index,
+                    )
+                )
+            if not claim.uncertainty.strip():
+                issues.append(
+                    ResearchIssue(
+                        "missing-uncertainty",
+                        "Model-generated claims need an uncertainty or scope statement.",
+                        index,
+                    )
+                )
         if claim.evidence_level.strip().lower() in {"unverified", "placeholder"}:
             issues.append(
                 ResearchIssue(

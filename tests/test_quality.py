@@ -103,3 +103,40 @@ class QualityTests(unittest.TestCase):
         )
         codes = {issue.code for issue in check_lesson(self.config, lesson).issues}
         self.assertIn("placeholder-content", codes)
+
+    def test_model_claim_cannot_self_certify_as_supported(self) -> None:
+        lesson = AILesson(
+            topic=self.topic,
+            summary="A limited explanation.",
+            sections=tuple(
+                ScriptSection(
+                    heading,
+                    "A useful explanation shows how a decision changes the outcome.",
+                    "Show a grounded subject and initial state, animate the causal "
+                    "mechanism with a camera move, then reveal the consequence and "
+                    "keep the same setting and subjects for the following scene.",
+                )
+                for heading in self.config.required_sections
+            ),
+            claims=tuple(
+                Claim(f"Claim {index} has a limited scope.", "supported", ())
+                for index in range(3)
+            ),
+            uncertainty="The example is simplified.",
+            provider_model="test/fake",
+        )
+        self.assertIn(
+            "unsupported-evidence-label",
+            {issue.code for issue in check_lesson(self.config, lesson).issues},
+        )
+        numeric = replace(
+            lesson,
+            claims=(
+                Claim("The result improved by 42% in 2024.", "model-generated", ()),
+            )
+            + lesson.claims[1:],
+        )
+        self.assertIn(
+            "unsourced-quantitative-claim",
+            {issue.code for issue in check_lesson(self.config, numeric).issues},
+        )

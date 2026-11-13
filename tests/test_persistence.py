@@ -61,9 +61,7 @@ class EpisodeRepositoryTests(unittest.TestCase):
             repository = EpisodeRepository(database)
             columns = {
                 row["name"]
-                for row in repository._connection.execute(
-                    "PRAGMA table_info(episodes)"
-                )
+                for row in repository._connection.execute("PRAGMA table_info(episodes)")
             }
             self.assertIn("lesson_uri", columns)
             self.assertIn("script_uri", columns)
@@ -92,6 +90,10 @@ class EpisodeRepositoryTests(unittest.TestCase):
         )
         self.repository.save(episode)
         awaiting = self.repository.submit_for_review(episode, "private://final.mp4")
+        self.assertEqual(
+            self.repository.artifacts_for_revision("episode-1", 1).video_uri,
+            "private://final.mp4",
+        )
         updated, review = self.repository.decide(
             awaiting,
             "owner-subject",

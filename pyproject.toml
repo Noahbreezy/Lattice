@@ -8,10 +8,15 @@ version = "0.1.0"
 description = "Configurable framework for producing short-form educational videos."
 requires-python = ">=3.11"
 
+[project.optional-dependencies]
+server = ["psycopg[binary]>=3.2,<4", "boto3>=1.35,<2"]
+
 [project.scripts]
 lattice-validate = "lattice.cli:main"
 lattice-review-server = "lattice.cli:review_server_main"
 lattice-run-local = "lattice.cli:run_local_main"
+lattice-server = "lattice.deployment:server_main"
+lattice-worker = "lattice.deployment:worker_main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

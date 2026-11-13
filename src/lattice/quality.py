@@ -106,6 +106,32 @@ def check_lesson(
                 f"Lesson must contain {min_claims}-{max_claims} claims.",
             )
         )
+    if any(
+        claim.evidence_level.lower() != "model-generated" for claim in lesson.claims
+    ):
+        issues.append(
+            QualityIssue(
+                "unsupported-evidence-label",
+                "Model-authored claims must be labelled model-generated until externally verified.",
+            )
+        )
+    statements = [claim.statement for claim in lesson.claims] + [
+        section.text for section in lesson.sections
+    ]
+    if any(
+        re.search(
+            r"\b(?:18|19|20)\d{2}\b|\b\d+(?:\.\d+)?\s*(?:%|percent|million|billion)\b",
+            statement,
+            re.IGNORECASE,
+        )
+        for statement in statements
+    ):
+        issues.append(
+            QualityIssue(
+                "unsourced-quantitative-claim",
+                "Model-authored dates, percentages, and large quantities need external verification.",
+            )
+        )
     if not lesson.uncertainty.strip():
         issues.append(
             QualityIssue(
