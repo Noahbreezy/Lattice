@@ -27,7 +27,7 @@ def build_review_evidence(
 
     research = bundle.draft.research
     script = bundle.draft.script
-    claims = [
+    claims: list[dict[str, Any]] = [
         {
             "claim_id": f"claim-{index + 1}",
             "statement": claim.statement,
@@ -38,7 +38,7 @@ def build_review_evidence(
         }
         for index, claim in enumerate(research.claims)
     ]
-    scenes = []
+    scenes: list[dict[str, Any]] = []
     for index, scene in enumerate(bundle.storyboard.scenes):
         section = next(
             (
@@ -126,7 +126,7 @@ def build_review_evidence(
             media["subtitle_sha256"] = _sha256(candidate)
 
     subtitle_entries = _read_srt(subtitle_path) if subtitle_path else []
-    scene_mappings = []
+    scene_mappings: list[dict[str, Any]] = []
     for index, scene in enumerate(bundle.storyboard.scenes):
         entry = subtitle_entries[index] if index < len(subtitle_entries) else None
         scene_mappings.append(
@@ -246,7 +246,7 @@ def _semantic_claim_matches(
         for word in re.findall(r"[a-z0-9]+", narration.lower())
         if len(word) > 3 and word not in _STOPWORDS
     }
-    matches = []
+    matches: list[dict[str, Any]] = []
     for claim in claims:
         claim_words = {
             word
@@ -265,7 +265,7 @@ def _semantic_claim_matches(
 def _read_srt(path: Path | None) -> list[dict[str, Any]]:
     if path is None:
         return []
-    entries = []
+    entries: list[dict[str, Any]] = []
     for block in path.read_text(encoding="utf-8").strip().split("\n\n"):
         lines = block.splitlines()
         if len(lines) < 3 or "-->" not in lines[1]:

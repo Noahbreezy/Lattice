@@ -138,7 +138,9 @@ class LocalApiTests(unittest.TestCase):
         )
         response = connection.getresponse()
         self.assertEqual(response.status, 200)
-        self.assertEqual(repository.get("episode-1").status, EpisodeStatus.APPROVED)
+        approved = repository.get("episode-1")
+        assert approved is not None
+        self.assertEqual(approved.status, EpisodeStatus.APPROVED)
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)

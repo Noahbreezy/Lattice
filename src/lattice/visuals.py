@@ -13,6 +13,7 @@ from .contracts import AssetReference, StoryboardScene
 class VisualProvider(Protocol):
     def create(self, scene: StoryboardScene, output_dir: str | Path) -> AssetReference:
         """Create a visual asset for one scene."""
+        ...
 
 
 def validate_svg(path: str | Path) -> None:

@@ -6,8 +6,10 @@ import hashlib
 import json
 import shutil
 from dataclasses import dataclass
+from collections.abc import Mapping
+from importlib import import_module
 from pathlib import Path
-from typing import Protocol
+from typing import Callable, Protocol, cast
 
 
 @dataclass(frozen=True)
@@ -22,6 +24,15 @@ class ObjectStorage(Protocol):
     def put_file(self, key: str, source: str | Path) -> StoredObject: ...
     def put_json(self, key: str, value: object) -> StoredObject: ...
     def get_bytes(self, uri: str) -> bytes: ...
+
+
+class _S3Body(Protocol):
+    def read(self) -> bytes: ...
+
+
+class _S3Client(Protocol):
+    def put_object(self, *, Bucket: str, Key: str, Body: bytes, ContentType: str) -> object: ...
+    def get_object(self, *, Bucket: str, Key: str) -> Mapping[str, _S3Body]: ...
 
 
 class LocalObjectStorage:
@@ -79,19 +90,19 @@ class S3ObjectStorage:
         self,
         bucket: str,
         prefix: str = "",
-        client=None,
+        client: _S3Client | None = None,
         endpoint_url: str | None = None,
     ) -> None:
         if not bucket.strip():
             raise ValueError("An object-storage bucket is required.")
         if client is None:
             try:
-                import boto3
+                factory = cast(Callable[..., _S3Client], getattr(import_module("boto3"), "client"))
             except ImportError as exc:
                 raise RuntimeError(
                     "Install lattice-video[server] for S3 support."
                 ) from exc
-            client = boto3.client("s3", endpoint_url=endpoint_url)
+            client = factory("s3", endpoint_url=endpoint_url)
         self.client = client
         self.bucket = bucket
         self.prefix = prefix.strip("/")

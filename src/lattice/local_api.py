@@ -11,6 +11,7 @@ import re
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import cast
 from urllib.parse import urlparse
 
 from .contracts import Episode, Review, ReviewDecision, ReviewMarker
@@ -79,7 +80,7 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
                 else:
                     self._write(
                         HTTPStatus.OK,
-                        [
+                        cast(object, [
                             {
                                 "revision": item.revision,
                                 "video": f"/media/{episode_id}/revision-{item.revision}",
@@ -89,7 +90,7 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
                             for item in self.repository.list_revision_artifacts(
                                 episode_id
                             )
-                        ],
+                        ]),
                     )
                 return
             for artifact_kind in ("lesson", "script"):
@@ -146,21 +147,28 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
             markers_value = payload.get("markers", [])
             if not isinstance(markers_value, list):
                 raise TypeError("markers must be an array.")
-            markers = tuple(
-                ReviewMarker(
-                    start_seconds=int(marker["start_seconds"]),
-                    end_seconds=int(marker["end_seconds"]),
+            markers_list: list[ReviewMarker] = []
+            for marker_value in cast(list[object], markers_value):
+                if not isinstance(marker_value, dict):
+                    raise TypeError("Each marker must be an object.")
+                marker = cast(dict[str, object], marker_value)
+                start = marker["start_seconds"]
+                end = marker["end_seconds"]
+                if not isinstance(start, (str, int, float)) or not isinstance(end, (str, int, float)):
+                    raise TypeError("Marker times must be numbers.")
+                markers_list.append(ReviewMarker(
+                    start_seconds=int(start),
+                    end_seconds=int(end),
                     criterion=str(marker["criterion"]),
                     comment=str(marker.get("comment", "")),
-                )
-                for marker in markers_value
-            )
+                ))
+            markers = tuple(markers_list)
             updated, review = self.repository.decide(
                 episode,
                 reviewer_id,
                 decision,
                 feedback,
-                tuple(str(item) for item in criteria_value),
+                tuple(str(item) for item in cast(list[object], criteria_value)),
                 markers,
             )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
@@ -168,7 +176,7 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
             return
         self._write(
             HTTPStatus.OK,
-            {
+            cast(object, {
                 "episode": self._episode_json(updated),
                 "review": {
                     "decision": review.decision.value,
@@ -186,7 +194,7 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
                     ],
                     "created_at": review.created_at,
                 },
-            },
+            }),
         )
 
     def _authorized(self) -> bool:
@@ -217,7 +225,7 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
         value = json.loads(self.rfile.read(length))
         if not isinstance(value, dict):
             raise TypeError("Request body must be an object.")
-        return value
+        return cast(dict[str, object], value)
 
     def _write(self, status: HTTPStatus, value: object) -> None:
         body = json.dumps(value).encode("utf-8")
@@ -266,6 +274,9 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
                 self._write(HTTPStatus.NOT_FOUND, {"error": "Media not found."})
                 return
             self._write_binary(body, "video/mp4")
+            return
+        if self.media_root is None:
+            self._write(HTTPStatus.NOT_FOUND, {"error": "Media not configured."})
             return
         candidate = Path(uri)
         if not candidate.is_absolute():
@@ -329,6 +340,9 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
                 self._write(HTTPStatus.NOT_FOUND, {"error": "Artifact not found."})
                 return
             self._write(HTTPStatus.OK, value)
+            return
+        if self.media_root is None:
+            self._write(HTTPStatus.NOT_FOUND, {"error": "Artifact serving is not configured."})
             return
         candidate = Path(uri)
         if not candidate.is_absolute():
@@ -395,6 +409,7 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
         }
 
     def log_message(self, format: str, *args: object) -> None:
+        del format, args
         return
 
 

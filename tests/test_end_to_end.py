@@ -7,8 +7,8 @@ from http.client import HTTPConnection
 from pathlib import Path
 from threading import Thread
 
-from lattice.config import load_config
-from lattice.contracts import Claim, EpisodeStatus, ScriptSection
+from lattice.config import ProjectConfig, load_config
+from lattice.contracts import Claim, EpisodeStatus, Review, ScriptSection, Topic
 from lattice.history import LessonHistory
 from lattice.local_api import create_review_server
 from lattice.persistence import EpisodeRepository
@@ -17,15 +17,17 @@ from lattice.runner import run_next_episode
 
 
 class RevisionProvider:
-    def generate_lesson(self, topic, config):
+    review: Review | None = None
+
+    def generate_lesson(self, topic: Topic, config: ProjectConfig) -> AILesson:
         return self._lesson(topic, config, "original")
 
-    def generate_revision(self, topic, config, review):
+    def generate_revision(self, topic: Topic, config: ProjectConfig, review: Review) -> AILesson:
         self.review = review
         return self._lesson(topic, config, "revised")
 
     @staticmethod
-    def _lesson(topic, config, version):
+    def _lesson(topic: Topic, config: ProjectConfig, version: str) -> AILesson:
         return AILesson(
             topic=topic,
             summary=f"A {version} explanation of {topic.title}.",
@@ -130,6 +132,7 @@ class EndToEndTests(unittest.TestCase):
                 self.assertEqual(second.id, first.id)
                 self.assertEqual(second.revision, 2)
                 self.assertEqual(second.status, EpisodeStatus.AWAITING_REVIEW)
+                assert provider.review is not None
                 self.assertEqual(provider.review.criteria, ("explanatory clarity",))
                 self.assertEqual(provider.review.markers[0].start_seconds, 1)
                 self.assertIn(
@@ -138,6 +141,7 @@ class EndToEndTests(unittest.TestCase):
                 self.assertNotEqual(second.final_video_uri, first.final_video_uri)
                 self.assertEqual(first_video.read_bytes(), original_video)
                 prior = repository.artifacts_for_revision(first.id, 1)
+                assert prior is not None
                 self.assertEqual(prior.video_uri, first.final_video_uri)
                 self.assertEqual(prior.lesson_uri, first.lesson_uri)
                 self.assertEqual(prior.script_uri, first.script_uri)

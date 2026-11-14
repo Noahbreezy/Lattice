@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import os
+import platform
 import re
 import shutil
 import subprocess
@@ -32,6 +32,7 @@ class Narration:
 class TtsProvider(Protocol):
     def synthesize(self, text: str, output_path: str | Path) -> Narration:
         """Create a WAV narration and return timing metadata."""
+        ...
 
 
 def validate_narration(narration: Narration) -> Narration:
@@ -147,7 +148,7 @@ class WindowsSpeechTts:
     def synthesize(self, text: str, output_path: str | Path) -> Narration:
         if not text.strip():
             raise ValueError("Cannot synthesize empty narration.")
-        if os.name != "nt" and shutil.which("powershell") is None:
+        if platform.system() != "Windows" and shutil.which("powershell") is None:
             raise RuntimeError(
                 "WindowsSpeechTts requires Windows PowerShell and System.Speech; "
                 "no cloud TTS fallback is available."
@@ -228,3 +229,6 @@ def _proportional_timings(words: list[str], duration: float) -> tuple[WordTiming
         WordTiming(word, index * step, (index + 1) * step)
         for index, word in enumerate(words)
     )
+
+
+proportional_timings = _proportional_timings

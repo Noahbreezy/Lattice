@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import threading
-from typing import Any
+import sqlite3
+from contextlib import AbstractContextManager
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, Callable, LiteralString, cast
+
+if TYPE_CHECKING:
+    import psycopg
 
 from .contracts import EpisodeStatus
-from .persistence import EpisodeRepository, Job, _episode_from_row, _job_from_row
+from .persistence import EpisodeRepository, Job, episode_from_row, job_from_row
 
 
 class _Connection:
@@ -20,13 +26,16 @@ class _Connection:
             raise RuntimeError(
                 "Install lattice-video[server] for PostgreSQL support."
             ) from exc
-        self.raw = psycopg.connect(dsn, autocommit=True, row_factory=dict_row)
+        connect = cast(Callable[..., psycopg.Connection[dict[str, Any]]], psycopg.connect)
+        self.raw = connect(dsn, autocommit=True, row_factory=dict_row)
         self.lock = threading.RLock()
-        self.transaction = None
+        self.transaction: AbstractContextManager[object] | None = None
 
     def execute(self, sql: str, params: tuple[Any, ...] = ()):
+        from psycopg.sql import SQL
+
         with self.lock:
-            return self.raw.execute(sql.replace("?", "%s"), params)
+            return self.raw.execute(SQL(cast(LiteralString, sql.replace("?", "%s"))), params)
 
     def commit(self) -> None:
         # Outside explicit transaction blocks the connection is autocommit.
@@ -35,7 +44,7 @@ class _Connection:
     def close(self) -> None:
         self.raw.close()
 
-    def __enter__(self):
+    def __enter__(self) -> _Connection:
         self.lock.acquire()
         try:
             self.transaction = self.raw.transaction()
@@ -46,9 +55,17 @@ class _Connection:
             raise
         return self
 
-    def __exit__(self, exc_type, exc, traceback):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None:
         try:
-            return self.transaction.__exit__(exc_type, exc, traceback)
+            transaction = self.transaction
+            if transaction is None:
+                raise RuntimeError("PostgreSQL transaction was not started.")
+            return transaction.__exit__(exc_type, exc, traceback)
         finally:
             self.transaction = None
             self.lock.release()
@@ -107,6 +124,8 @@ class PostgresEpisodeRepository(EpisodeRepository):
         row = self._connection.execute(
             "SELECT COALESCE(MAX(queue_priority), 0) + 1 AS value FROM episodes"
         ).fetchone()
+        if row is None:
+            raise RuntimeError("Priority query returned no row.")
         return int(row["value"])
 
     def _front_priority(self) -> int:
@@ -114,6 +133,8 @@ class PostgresEpisodeRepository(EpisodeRepository):
             "SELECT COALESCE(MIN(queue_priority), 0) - 1 AS value FROM episodes WHERE status = ?",
             (EpisodeStatus.QUEUED.value,),
         ).fetchone()
+        if row is None:
+            raise RuntimeError("Priority query returned no row.")
         return int(row["value"])
 
     def claim_next(self):
@@ -129,11 +150,12 @@ class PostgresEpisodeRepository(EpisodeRepository):
                 "UPDATE episodes SET status = ?, queue_priority = NULL WHERE id = ?",
                 (EpisodeStatus.PROCESSING.value, row["id"]),
             )
-        return _episode_from_row(
-            self._connection.execute(
+        claimed = self._connection.execute(
                 "SELECT * FROM episodes WHERE id = ?", (row["id"],)
             ).fetchone()
-        )
+        if claimed is None:
+            raise RuntimeError("Claimed episode disappeared.")
+        return episode_from_row(cast(sqlite3.Row, claimed))
 
     def claim_job(self, kind: str | None = None, job_id: str | None = None) -> Job:
         with self._connection:
@@ -155,11 +177,12 @@ class PostgresEpisodeRepository(EpisodeRepository):
                 "'YYYY-MM-DD HH24:MI:SS') WHERE id = ?",
                 (row["id"],),
             )
-        return _job_from_row(
-            self._connection.execute(
+        claimed = self._connection.execute(
                 "SELECT * FROM jobs WHERE id = ?", (row["id"],)
             ).fetchone()
-        )
+        if claimed is None:
+            raise RuntimeError("Claimed job disappeared.")
+        return job_from_row(cast(sqlite3.Row, claimed))
 
     def heartbeat_job(self, job_id: str, lease_minutes: int = 15) -> Job:
         if lease_minutes < 1:

@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from lattice.config import load_config
+from lattice.config import ProjectConfig, load_config
 from lattice.contracts import Claim, ResearchPacket, ScriptSection, Source, Topic
 from lattice.history import LessonHistory
 from lattice.pipeline import (
@@ -162,7 +162,7 @@ class PipelineTests(unittest.TestCase):
 
     def test_ai_lesson_provider_drives_script_sections(self) -> None:
         class FakeLessonProvider:
-            def generate_lesson(self, topic, config):
+            def generate_lesson(self, topic: Topic, config: ProjectConfig) -> AILesson:
                 return AILesson(
                     topic=topic,
                     summary="A model-authored lesson.",

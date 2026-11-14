@@ -35,6 +35,9 @@ class ArtifactContractTests(unittest.TestCase):
 
     def test_pipeline_emits_versioned_provenance_chain(self) -> None:
         self.assertEqual(self.script.version, 1)
+        assert self.script.provenance is not None
+        assert self.storyboard.provenance is not None
+        assert self.manifest.provenance is not None
         self.assertEqual(self.script.provenance.config_hash, self.config.config_hash)
         self.assertEqual(
             self.storyboard.provenance.input_artifact_ids,

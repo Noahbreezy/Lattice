@@ -8,7 +8,7 @@ from lattice.renderer import FfmpegRenderer
 from lattice.tts import (
     Narration,
     WindowsSpeechTts,
-    _proportional_timings,
+    proportional_timings,
     reconcile_storyboard_timing,
     validate_narration,
 )
@@ -16,7 +16,7 @@ from lattice.tts import (
 
 class TtsTests(unittest.TestCase):
     def test_word_timings_cover_audio_duration(self) -> None:
-        timings = _proportional_timings(["one", "two", "three"], 3.0)
+        timings = proportional_timings(["one", "two", "three"], 3.0)
         self.assertEqual(len(timings), 3)
         self.assertEqual(timings[0].start_seconds, 0)
         self.assertEqual(timings[-1].end_seconds, 3.0)
@@ -31,7 +31,7 @@ class TtsTests(unittest.TestCase):
         narration = Narration(
             "narration.wav",
             7.6,
-            _proportional_timings(["one", "two", "three", "four"], 7.6),
+            proportional_timings(["one", "two", "three", "four"], 7.6),
             "test",
         )
         reconciled = reconcile_storyboard_timing(storyboard, narration)
@@ -49,7 +49,7 @@ class TtsTests(unittest.TestCase):
         narration = Narration(
             "narration.wav",
             8.6,
-            _proportional_timings(["one", "two"], 8.6),
+            proportional_timings(["one", "two"], 8.6),
             "test",
         )
         with self.assertRaisesRegex(ValueError, "duration exceeds"):
@@ -76,7 +76,7 @@ class TtsTests(unittest.TestCase):
                 audio.setframerate(8000)
                 audio.writeframes(b"\x00\x00" * 8000)
             narration = Narration(
-                str(path), 1.0, _proportional_timings(["hello"], 1.0), "test"
+                str(path), 1.0, proportional_timings(["hello"], 1.0), "test"
             )
             with self.assertRaisesRegex(RuntimeError, "silent"):
                 validate_narration(narration)

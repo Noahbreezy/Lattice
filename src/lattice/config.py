@@ -6,7 +6,7 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 
 class ConfigError(ValueError):
@@ -67,7 +67,7 @@ class ProjectConfig:
     def config_hash(self) -> str:
         """Return a stable hash for this validated configuration."""
 
-        payload = {
+        payload: dict[str, object] = {
             "name": self.name,
             "description": self.description,
             "channel_name": self.channel_name,
@@ -93,9 +93,10 @@ class ProjectConfig:
         return "1"
 
     @classmethod
-    def from_mapping(cls, raw: MappingLike) -> ProjectConfig:
+    def from_mapping(cls, raw: object) -> ProjectConfig:
         if not isinstance(raw, dict):
             raise ConfigError("The project configuration must be a JSON object.")
+        raw = cast(MappingLike, raw)
 
         project = _required_object(raw, "project")
         content = _required_object(raw, "content")
@@ -161,14 +162,14 @@ def load_config(path: str | Path) -> ProjectConfig:
     except OSError as exc:
         raise ConfigError(f"Could not read {config_path}: {exc}") from exc
 
-    return ProjectConfig.from_mapping(raw)
+    return ProjectConfig.from_mapping(cast(object, raw))
 
 
 def _required_object(raw: MappingLike, key: str) -> MappingLike:
     value = raw.get(key)
     if not isinstance(value, dict):
         raise ConfigError(f"{key} must be an object.")
-    return value
+    return cast(MappingLike, value)
 
 
 def _required_string(raw: MappingLike, key: str, section: str) -> str:
@@ -182,18 +183,20 @@ def _required_strings(raw: MappingLike, key: str, section: str) -> tuple[str, ..
     value = raw.get(key)
     if not isinstance(value, list) or not value:
         raise ConfigError(f"{section}.{key} must be a non-empty array of strings.")
-    if any(not isinstance(item, str) or not item.strip() for item in value):
+    items = cast(list[object], value)
+    if any(not isinstance(item, str) or not item.strip() for item in items):
         raise ConfigError(f"{section}.{key} must contain only non-empty strings.")
-    return tuple(item.strip() for item in value)
+    return tuple(item.strip() for item in items if isinstance(item, str))
 
 
 def _required_tools(value: Any) -> tuple[dict[str, Any], ...]:
     if not isinstance(value, list):
         raise ConfigError("production.ai_tools must be an array.")
     tools: list[dict[str, Any]] = []
-    for index, tool in enumerate(value):
+    for index, tool in enumerate(cast(list[object], value)):
         if not isinstance(tool, dict):
             raise ConfigError(f"production.ai_tools[{index}] must be an object.")
+        tool = cast(dict[str, Any], tool)
         name = tool.get("name")
         purpose = tool.get("purpose")
         if not isinstance(name, str) or not name.strip():
@@ -214,9 +217,10 @@ def _optional_topic_seeds(value: Any) -> tuple[dict[str, str], ...]:
     if not isinstance(value, list):
         raise ConfigError("content.topic_seeds must be an array.")
     topics: list[dict[str, str]] = []
-    for index, topic in enumerate(value):
+    for index, topic in enumerate(cast(list[object], value)):
         if not isinstance(topic, dict):
             raise ConfigError(f"content.topic_seeds[{index}] must be an object.")
+        topic = cast(dict[str, object], topic)
         title = topic.get("title")
         subject_area = topic.get("subject_area")
         if not isinstance(title, str) or not title.strip():
@@ -236,6 +240,7 @@ def _optional_retention(value: Any) -> RetentionSettings:
         return RetentionSettings()
     if not isinstance(value, dict):
         raise ConfigError("production.retention must be an object.")
+    value = cast(dict[str, object], value)
     fields = (
         "max_cloud_videos",
         "max_server_videos",

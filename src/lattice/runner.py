@@ -98,7 +98,10 @@ def _configured_renderer(config: ProjectConfig, output: Path) -> RenderProvider:
             rate=int(narration.get("rate") or 0),
         )
     else:
-        tts = provider_factory("narration", narration_name)(config, narration)
+        narration_factory = provider_factory("narration", narration_name)
+        if narration_factory is None:
+            raise ValueError(f"Unsupported narration provider: {narration_name}")
+        tts = narration_factory(config, narration)
     visual = tools.get("video generator", {})
     visual_name = str(visual.get("provider") or "local").lower()
     visual_factory = provider_factory("visual", visual_name)
@@ -203,9 +206,13 @@ def run_next_episode(
                         review=rejection,
                     )
                 elif stage == "run lesson and script quality checks":
+                    if draft is None:
+                        raise RuntimeError("Lesson generation must precede quality checks.")
                     if not offline:
                         require_script_quality(config, draft.research, draft.script)
                 elif stage == "create storyboard and local visual assets":
+                    if draft is None:
+                        raise RuntimeError("Lesson generation must precede storyboard creation.")
                     bundle = assemble_production_bundle(config, draft, review=rejection)
                     revision_dir.mkdir(parents=True, exist_ok=True)
                     artifact_path.write_text(
@@ -225,6 +232,8 @@ def run_next_episode(
                         encoding="utf-8",
                     )
                 elif stage == "render and caption video":
+                    if bundle is None:
+                        raise RuntimeError("Storyboard creation must precede rendering.")
                     renderer = (
                         renderer_factory(revision_dir / "rendered")
                         if renderer_factory is not None
@@ -232,6 +241,8 @@ def run_next_episode(
                     )
                     video = renderer.render(bundle.render_job)
                 elif stage == "validate rendered media":
+                    if bundle is None or renderer is None or video is None:
+                        raise RuntimeError("Rendering must precede media validation.")
                     materialized = getattr(renderer, "last_job", None)
                     expected_duration = (
                         sum(
@@ -243,6 +254,8 @@ def run_next_episode(
                     )
                     validate_rendered_video(bundle, video.uri, expected_duration)
                 elif stage == "store private review artifacts":
+                    if bundle is None or renderer is None or video is None:
+                        raise RuntimeError("Rendering must precede artifact storage.")
                     materialized = getattr(renderer, "last_job", None)
                     manifest = (
                         materialized.asset_manifest
@@ -293,7 +306,7 @@ def run_next_episode(
                     )
                 elif (
                     stage == "human quality review and revision"
-                    and submitted.status != EpisodeStatus.AWAITING_REVIEW
+                    and (submitted is None or submitted.status != EpisodeStatus.AWAITING_REVIEW)
                 ):
                     raise RuntimeError("Production did not enter the review queue.")
         except Exception:
@@ -330,3 +343,7 @@ def run_next_episode(
             "Production completed without submitting the episode for review."
         )
     return result
+
+
+configured_renderer = _configured_renderer
+validate_local_capabilities = _validate_local_capabilities

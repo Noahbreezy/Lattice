@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Callable, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -30,6 +30,13 @@ class ResearchProvider(Protocol):
 
     def research(self, topic: Topic) -> ResearchPacket:
         """Return a source-linked research packet for a topic."""
+        ...
+
+
+class _HttpResponse(Protocol):
+    def __enter__(self) -> _HttpResponse: ...
+    def __exit__(self, exc_type: object, exc_value: object, traceback: object) -> object: ...
+    def read(self) -> bytes: ...
 
 
 @dataclass(frozen=True)
@@ -74,6 +81,7 @@ class AILessonProvider(Protocol):
 
     def generate_lesson(self, topic: Topic, config: ProjectConfig) -> AILesson:
         """Generate structured lesson content without human intervention."""
+        ...
 
 
 class OllamaLessonProvider:
@@ -84,7 +92,7 @@ class OllamaLessonProvider:
         model: str,
         endpoint: str = "http://127.0.0.1:11434/api/generate",
         timeout: int = 180,
-        opener=urlopen,
+        opener: Callable[..., _HttpResponse] = urlopen,
     ) -> None:
         if not model.strip():
             raise ValueError("An Ollama model name is required.")
@@ -271,13 +279,13 @@ def _heading_key(value: str) -> str:
 def create_configured_lesson_provider(config: ProjectConfig) -> AILessonProvider:
     """Create the configured lesson provider for production execution."""
 
-    tool = next(
+    tool: dict[str, object] = next(
         (
             tool
             for tool in config.ai_tools
             if str(tool.get("name", "")).strip().lower() == "script model"
         ),
-        {},
+        dict[str, object](),
     )
     provider = str(tool.get("provider") or "ollama").strip().lower()
     if provider != "ollama":
@@ -295,13 +303,13 @@ def create_configured_lesson_provider(config: ProjectConfig) -> AILessonProvider
 def create_configured_research_provider(
     config: ProjectConfig,
 ) -> ResearchProvider | None:
-    tool = next(
+    tool: dict[str, object] = next(
         (
             item
             for item in config.ai_tools
             if str(item.get("name", "")).strip().lower() == "research assistant"
         ),
-        {},
+        dict[str, object](),
     )
     name = str(tool.get("provider") or "").strip().lower()
     if not name:
@@ -364,7 +372,7 @@ class WikipediaResearchProvider:
     summary. A stronger model can later rewrite and cross-check this packet.
     """
 
-    def __init__(self, opener=urlopen, timeout: int = 15) -> None:
+    def __init__(self, opener: Callable[..., _HttpResponse] = urlopen, timeout: int = 15) -> None:
         self.opener = opener
         self.timeout = timeout
 
@@ -473,3 +481,6 @@ def require_verified_research(packet: ResearchPacket) -> None:
     issues = validate_research(packet)
     if issues:
         raise ValueError("; ".join(issue.message for issue in issues))
+
+
+lesson_prompt = _lesson_prompt

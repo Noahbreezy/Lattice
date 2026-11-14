@@ -22,6 +22,7 @@ class Publisher(Protocol):
         self, video: PublishedVideo, title: str, description: str
     ) -> Publication:
         """Publish an approved video through a configured platform adapter."""
+        ...
 
 
 class LocalPublisher:
@@ -32,6 +33,7 @@ class LocalPublisher:
     ) -> Publication:
         if video.approval_state.value != "approved":
             raise ValueError("Only approved videos can be published.")
+        del title, description
         return Publication(
             video.video_id, "local", "simulated", remote_id=video.video_id
         )

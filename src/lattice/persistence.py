@@ -51,6 +51,7 @@ class EpisodeRepository:
 
     def __init__(self, path: str | Path = ":memory:") -> None:
         self._connection = sqlite3.connect(str(path), check_same_thread=False)
+        self.connection = self._connection
         self._connection.row_factory = sqlite3.Row
         self._connection.execute("PRAGMA foreign_keys = ON")
         self._connection.execute("PRAGMA journal_mode = WAL")
@@ -683,3 +684,8 @@ def _job_from_row(row: sqlite3.Row) -> Job:
         error=row["error"],
         lease_until=row["lease_until"],
     )
+
+
+# Shared row converters for database adapters.
+episode_from_row = _episode_from_row
+job_from_row = _job_from_row

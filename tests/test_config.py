@@ -5,7 +5,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from lattice.config import ConfigError, ProjectConfig, load_config
-from lattice.runner import _configured_renderer, _validate_local_capabilities
+from lattice.renderer import FfmpegRenderer
+from lattice.runner import configured_renderer, validate_local_capabilities
 
 
 class ProjectConfigTests(unittest.TestCase):
@@ -17,7 +18,7 @@ class ProjectConfigTests(unittest.TestCase):
         self.assertEqual(config.max_video_length_seconds, 179)
         self.assertIn("The idea", config.required_sections)
         self.assertEqual(config.retention.max_server_videos, 5)
-        _validate_local_capabilities(config, offline=False)
+        validate_local_capabilities(config, offline=False)
 
     def test_runner_rejects_unavailable_required_provider_and_workflow(self) -> None:
         config = load_config(
@@ -28,9 +29,9 @@ class ProjectConfigTests(unittest.TestCase):
             for tool in config.ai_tools
         )
         with self.assertRaisesRegex(ValueError, "video generator"):
-            _validate_local_capabilities(replace(config, ai_tools=tools), offline=False)
+            validate_local_capabilities(replace(config, ai_tools=tools), offline=False)
         with self.assertRaisesRegex(ValueError, "workflow"):
-            _validate_local_capabilities(
+            validate_local_capabilities(
                 replace(config, workflow=("render and caption video",)), offline=False
             )
 
@@ -46,17 +47,23 @@ class ProjectConfigTests(unittest.TestCase):
         )
         custom = replace(config, ai_tools=tools)
         visual = object()
+        def create_visual(*_args: object) -> object:
+            del _args
+            return visual
+
+        def factory(capability: str, name: str):
+            if (capability, name) == ("visual", "custom"):
+                return create_visual
+            return None
         with patch(
             "lattice.runner.provider_factory",
-            side_effect=lambda capability, name: (
-                (lambda *_: visual)
-                if (capability, name) == ("visual", "custom")
-                else None
-            ),
+            side_effect=factory,
         ):
-            _validate_local_capabilities(custom, offline=False)
+            validate_local_capabilities(custom, offline=False)
+            renderer = configured_renderer(custom, Path("var/test"))
+            assert isinstance(renderer, FfmpegRenderer)
             self.assertIs(
-                _configured_renderer(custom, Path("var/test")).visual_provider, visual
+                renderer.visual_provider, visual
             )
 
     def test_rejects_invalid_video_length(self) -> None:
@@ -87,7 +94,7 @@ class ProjectConfigTests(unittest.TestCase):
                 load_config(path)
 
     def test_rejects_negative_retention_limit(self) -> None:
-        raw = {
+        raw: dict[str, object] = {
             "project": {"name": "x", "description": "x"},
             "content": {
                 "channel_name": "x",
@@ -109,7 +116,7 @@ class ProjectConfigTests(unittest.TestCase):
             ProjectConfig.from_mapping(raw)
 
     def test_partial_retention_keeps_default_limits(self) -> None:
-        raw = {
+        raw: dict[str, object] = {
             "project": {"name": "x", "description": "x"},
             "content": {
                 "channel_name": "x",

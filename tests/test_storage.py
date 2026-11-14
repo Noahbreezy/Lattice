@@ -9,13 +9,17 @@ from lattice.storage import LocalObjectStorage, S3ObjectStorage
 
 class FakeS3:
     def __init__(self):
-        self.objects = {}
+        self.objects: dict[tuple[str, str], bytes] = {}
 
-    def put_object(self, **kwargs):
-        self.objects[(kwargs["Bucket"], kwargs["Key"])] = kwargs["Body"]
+    def put_object(self, *, Bucket: str, Key: str, Body: bytes, ContentType: str) -> None:
+        del ContentType
+        bucket, key, body = Bucket, Key, Body
+        assert isinstance(bucket, str) and isinstance(key, str)
+        assert isinstance(body, bytes)
+        self.objects[(bucket, key)] = body
 
-    def get_object(self, **kwargs):
-        return {"Body": io.BytesIO(self.objects[(kwargs["Bucket"], kwargs["Key"])])}
+    def get_object(self, *, Bucket: str, Key: str) -> dict[str, io.BytesIO]:
+        return {"Body": io.BytesIO(self.objects[(Bucket, Key)])}
 
 
 class StorageTests(unittest.TestCase):

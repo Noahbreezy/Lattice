@@ -24,8 +24,10 @@ class PostgresRepositoryTests(unittest.TestCase):
             processing = repository.claim_episode(episode_id)
             self.assertEqual(processing.status, EpisodeStatus.PROCESSING)
             awaiting = repository.submit_for_review(processing, "s3://test/video.mp4")
+            artifacts = repository.artifacts_for_revision(episode_id, 1)
+            assert artifacts is not None
             self.assertEqual(
-                repository.artifacts_for_revision(episode_id, 1).video_uri,
+                artifacts.video_uri,
                 "s3://test/video.mp4",
             )
             rejected, review = repository.decide(

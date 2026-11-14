@@ -23,7 +23,7 @@ class OperationsTests(unittest.TestCase):
                 "lessons/one/revision-1.json", {"kind": "lesson", "sections": []}
             )
             self.assertEqual(
-                json.loads(stored.path.read_text(encoding="utf-8")),
+                json.loads(Path(stored.path).read_text(encoding="utf-8")),
                 {"kind": "lesson", "sections": []},
             )
             self.assertTrue(storage.verify(stored))
@@ -34,7 +34,7 @@ class OperationsTests(unittest.TestCase):
         job = repository.claim_job()
         heartbeat = repository.heartbeat_job(job.id)
         self.assertEqual(heartbeat.status, "running")
-        repository._connection.execute(
+        repository.connection.execute(
             "UPDATE jobs SET lease_until = '2000-01-01T00:00:00Z' WHERE id = ?",
             (job.id,),
         )
