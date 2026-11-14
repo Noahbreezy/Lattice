@@ -107,7 +107,8 @@ class PipelineTests(unittest.TestCase):
         for scene in storyboard.scenes:
             self.assertIn("9:16", scene.visual_direction)
             self.assertIn("SHARED STYLE BIBLE:", scene.visual_direction)
-            self.assertIn("HIGGSFIELD SCENE PROMPT", scene.visual_direction)
+            self.assertIn("VISUAL SCENE PROMPT", scene.visual_direction)
+            self.assertIn(self.config.lesson_prompt, scene.visual_direction)
             self.assertNotIn(
                 "show the concrete idea from the section", scene.visual_direction
             )
@@ -129,9 +130,7 @@ class PipelineTests(unittest.TestCase):
         output = format_production_script(script, storyboard)
         self.assertIn("# Timed video production script", output)
         self.assertEqual(output.count("### Narration"), len(script.sections))
-        self.assertEqual(
-            output.count("### Higgsfield visual prompt"), len(script.sections)
-        )
+        self.assertEqual(output.count("### Visual prompt"), len(script.sections))
         self.assertEqual(
             output.count("### Timing synchronization"), len(script.sections)
         )

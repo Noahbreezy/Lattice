@@ -15,3 +15,7 @@ persistence, review, and retention APIs from [`__init__.py`](../../../src/lattic
 | [`persistence.md`](persistence.md) | SQLite episode and review adapter |
 | [`retention.md`](retention.md) | Oldest-first deletion planning |
 | [`cli.md`](cli.md) | Configuration-validation command |
+| [`postgres.md`](postgres.md) | PostgreSQL review and job repository |
+| [`storage.md`](storage.md) | Local and S3-compatible private storage |
+| [`deployment.md`](deployment.md) | Server and production worker entry points |
+| [`providers.md`](providers.md) | Capability entry points and built-in adapters |

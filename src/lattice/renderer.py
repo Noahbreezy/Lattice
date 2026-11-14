@@ -17,7 +17,7 @@ from .tts import (
     reconcile_storyboard_timing,
     validate_narration,
 )
-from .visuals import IllustratedVisualProvider
+from .visuals import IllustratedVisualProvider, VisualProvider
 
 
 class FfmpegRenderer:
@@ -28,12 +28,14 @@ class FfmpegRenderer:
         output_dir: str | Path,
         ffmpeg: str = "ffmpeg",
         tts_provider: TtsProvider | None = None,
+        visual_provider: VisualProvider | None = None,
     ) -> None:
         self.output_dir = Path(output_dir)
         self.ffmpeg = ffmpeg
         # Narration is mandatory for the local MVP. Callers may inject a local
         # provider for tests or an installed offline engine.
         self.tts_provider = tts_provider or WindowsSpeechTts()
+        self.visual_provider = visual_provider or IllustratedVisualProvider()
         self.last_job: RenderJob | None = None
 
     def render(self, job: RenderJob) -> PublishedVideo:
@@ -50,7 +52,9 @@ class FfmpegRenderer:
         )
         with tempfile.TemporaryDirectory() as directory:
             job = _materialize_assets(
-                job, self.output_dir / "assets" / job.job_id.replace(":", "_")
+                job,
+                self.output_dir / "assets" / job.job_id.replace(":", "_"),
+                self.visual_provider,
             )
             narration = self._narrate(job, Path(directory))
             if narration is not None:
@@ -176,8 +180,9 @@ def _ffmpeg_path(path: str) -> str:
     return str(Path(path)).replace("\\", "/").replace(":", "\\:")
 
 
-def _materialize_assets(job: RenderJob, directory: Path) -> RenderJob:
-    provider = IllustratedVisualProvider()
+def _materialize_assets(
+    job: RenderJob, directory: Path, provider: VisualProvider
+) -> RenderJob:
     assets = []
     for index, asset in enumerate(job.asset_manifest.assets):
         if Path(asset.uri).is_file() and asset.uri.endswith(".svg"):

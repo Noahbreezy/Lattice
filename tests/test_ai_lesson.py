@@ -1,13 +1,24 @@
 import json
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from lattice.config import load_config
-from lattice.contracts import Topic
+from lattice.contracts import (
+    Claim,
+    ResearchPacket,
+    Review,
+    ReviewDecision,
+    ReviewMarker,
+    Source,
+    Topic,
+)
 from lattice.research import (
     OllamaLessonProvider,
+    WikipediaResearchProvider,
     _lesson_prompt,
     create_configured_lesson_provider,
+    create_configured_research_provider,
 )
 
 
@@ -36,12 +47,54 @@ class _CapturingOpener:
 
 
 class AiLessonTests(unittest.TestCase):
+    def test_revision_prompt_includes_saved_review_context(self):
+        config = load_config(
+            Path(__file__).parents[1] / "configs" / "knowledge-channel.json"
+        )
+        response = {
+            "summary": "A revised explanation.",
+            "uncertainty": "This remains a simplified example.",
+            "sections": [
+                {
+                    "heading": heading,
+                    "text": "A clear revised explanation shows the cause, the mechanism, and the result in this example.",
+                    "visual_description": "Show a grounded subject in a consistent navy setting. Animate the initial state and the causal mechanism, then reveal the resulting state with a slow camera move and a coherent handoff to the following scene.",
+                }
+                for heading in config.required_sections
+            ],
+            "claims": [
+                {
+                    "statement": f"Limited claim number {index}.",
+                    "uncertainty": "Simplified.",
+                }
+                for index in range(3)
+            ],
+        }
+        opener = _CapturingOpener(response)
+        provider = OllamaLessonProvider("test-model", opener=opener)
+        review = Review(
+            "episode-1",
+            ReviewDecision.REJECT,
+            "owner",
+            "Clarify the causal transition.",
+            ("explanatory clarity",),
+            (ReviewMarker(1, 3, "pacing", "Show the consequence sooner."),),
+        )
+        provider.generate_revision(Topic("Path dependence", "systems"), config, review)
+        prompt = json.loads(opener.request.data)["prompt"]
+        self.assertIn("Clarify the causal transition", prompt)
+        self.assertIn("explanatory clarity", prompt)
+        self.assertIn('"start_seconds": 1', prompt)
+        self.assertIn("Show the consequence sooner", prompt)
+
     def test_prompt_sets_a_maximum_without_padding_to_it(self):
         config = load_config(
             Path(__file__).parents[1] / "configs" / "knowledge-channel.json"
         )
         prompt = _lesson_prompt(Topic("Path dependence", "systems"), config)
-        self.assertIn("shorter than 180 seconds", prompt)
+        self.assertIn("no longer than 179 seconds", prompt)
+        self.assertIn(config.lesson_prompt, prompt)
+        self.assertIn("high information density without rushing", prompt)
         self.assertIn("only as long as needed", prompt)
         self.assertIn("Do not\n  pad", prompt)
 
@@ -186,3 +239,92 @@ class AiLessonTests(unittest.TestCase):
         self.assertIsInstance(provider, OllamaLessonProvider)
         self.assertEqual(provider.model, "qwen3:4b")
         self.assertEqual(provider.endpoint, "http://127.0.0.1:11434/api/generate")
+
+    def test_configured_research_provider_selects_wikipedia(self):
+        from dataclasses import replace
+
+        config = load_config(
+            Path(__file__).parents[1] / "configs" / "knowledge-channel.json"
+        )
+        tools = tuple(
+            {**tool, "provider": "wikipedia", "required": True}
+            if tool["name"] == "research assistant"
+            else tool
+            for tool in config.ai_tools
+        )
+        self.assertIsInstance(
+            create_configured_research_provider(replace(config, ai_tools=tools)),
+            WikipediaResearchProvider,
+        )
+
+    def test_configured_lesson_provider_loads_installed_adapter(self):
+        from dataclasses import replace
+
+        config = load_config(
+            Path(__file__).parents[1] / "configs" / "knowledge-channel.json"
+        )
+        tools = tuple(
+            {**tool, "provider": "custom"} if tool["name"] == "script model" else tool
+            for tool in config.ai_tools
+        )
+        sentinel = object()
+        with patch(
+            "lattice.research.provider_factory", return_value=lambda *_: sentinel
+        ):
+            self.assertIs(
+                create_configured_lesson_provider(replace(config, ai_tools=tools)),
+                sentinel,
+            )
+
+    def test_grounded_lesson_retains_sources_without_self_verifying_claims(self):
+        config = load_config(
+            Path(__file__).parents[1] / "configs" / "knowledge-channel.json"
+        )
+        topic = Topic("A useful idea", "systems")
+        packet = ResearchPacket(
+            topic,
+            "A sourced summary of the mechanism.",
+            (
+                Source(
+                    "Reference",
+                    "Reference citation",
+                    "https://example.org/ref",
+                    "reference",
+                ),
+            ),
+            (Claim("A limited claim.", "supported", (0,)),),
+            "2026-01-01T00:00:00Z",
+        )
+        response = {
+            "summary": "A limited explanation.",
+            "uncertainty": "The example is simplified.",
+            "sections": [
+                {
+                    "heading": heading,
+                    "text": "A useful example shows how a decision changes the next outcome in practice.",
+                    "visual_description": "Show a grounded subject in a continuous vertical setting. Animate the starting state and causal mechanism, move the camera through the comparison, reveal the resulting state, and maintain subjects and lighting for the following scene.",
+                }
+                for heading in config.required_sections
+            ],
+            "claims": [
+                {
+                    "statement": f"A limited claim about mechanism {index}.",
+                    "evidence_level": "model-generated",
+                }
+                for index in range(3)
+            ],
+        }
+        opener = _CapturingOpener(response)
+        lesson = OllamaLessonProvider(
+            "test-model", opener=opener
+        ).generate_grounded_lesson(
+            topic,
+            config,
+            packet,
+        )
+        self.assertIn(
+            "https://example.org/ref", json.loads(opener.request.data)["prompt"]
+        )
+        research = lesson.to_research_packet()
+        self.assertEqual(research.sources[1], packet.sources[0])
+        self.assertEqual(research.claims[0].source_indices, (0,))

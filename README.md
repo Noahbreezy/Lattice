@@ -27,13 +27,11 @@ directly on `main`.
 
 ## Status
 
-The current slice provides dependency-free configuration and versioned
-Script-to-PublishedVideo artifact contracts with provenance, a local
-topic/history store, a deterministic development pipeline, deterministic
-research/script quality gates, and a SQLite persistence adapter for
-server-oriented episode/review state and retryable jobs. Its research data is
-explicitly provisional and is intended to be replaced by an AI lesson provider
-for the recreational workflow.
+The current implementation provides versioned Script-to-PublishedVideo
+contracts, configured lesson and provider adapters, deterministic content and
+media gates, revision-aware production, and private review. SQLite and local
+files support development; PostgreSQL and S3-compatible storage support the
+server mode. Offline research fixtures remain explicitly provisional.
 
 ## Quick start
 
@@ -86,8 +84,8 @@ storyboards derive their actual runtime from the amount of narration needed for
 a clear explanation; content is never padded to reach the ceiling.
 
 Tool entries describe capabilities rather than hard-coding a vendor API. This
-keeps a project portable: integrations can later map a capability such as
-`video generator` to Higgsfield or another provider. Generated storyboard
+keeps a project portable: installed entry-point adapters can map a capability
+such as `video generator` to a provider. Generated storyboard
 entries are standalone scene prompts: each contains the spoken narration, a
 specific visual explanation of that logical step, the scene duration, and a
 beat-by-beat timing plan that synchronizes visual actions to narration excerpts.
@@ -137,12 +135,11 @@ The project has mirrored domain documentation under [`docs/`](docs/README.md).
 Each page follows the corresponding source, configuration, or test path so
 that implementation behavior and its documentation can be navigated together.
 
-The planned production mode is a private server-hosted review app. Finished
-videos will be stored in private object storage, approved videos will remain
-available for later upload, and rejected videos will return to the front of
-the processing queue with required reviewer feedback. Authentication and
-authorization are server responsibilities; credentials must never be embedded
-in browser code or committed configuration.
+The server mode uses PostgreSQL, private S3-compatible object storage, a
+production worker, and a mobile review page. Approved videos remain private
+for later upload; rejected revisions return to the queue with saved feedback.
+Keep credentials in environment secrets and place the HTTP server behind TLS
+and an authenticating reverse proxy.
 
 The local persistence adapter can be exercised with:
 
@@ -182,7 +179,8 @@ finally:
 ```
 
 The API exposes `GET /health`, `GET /episodes`, `GET /review-queue`,
-`GET /episodes/{id}`, `GET /episodes/{id}/reviews`, and
+`GET /episodes/{id}`, `GET /episodes/{id}/reviews`,
+`GET /episodes/{id}/revisions`, historical revision media and content, and
 `POST /episodes/{id}/review`. Review rejection payloads may include a
 `criteria` array and timestamped `markers` with `start_seconds`,
 `end_seconds`, `criterion`, and optional `comment`. Set
@@ -236,9 +234,8 @@ is no silent-audio or blank-visual fallback.
 topic selection through a duration-accurate vertical render job. The built-in
 demo research fixture covers Path dependence and Base rates for exercising the
 full workflow; it is not a replacement for a live research provider.
-SQLite is used only to keep local development dependency-free. The repository
-interface is designed for a PostgreSQL implementation when the server API and
-deployment are introduced.
+SQLite keeps local development dependency-free. The server uses the same
+repository contract backed by PostgreSQL.
 
 ## Retention settings
 
@@ -261,21 +258,73 @@ When configuration fields, workflow stages, or public APIs change, update this
 README and the relevant example configuration in the same change. Add or update
 tests for validation behavior. Future integrations should document required
 credentials and provider-specific setup without committing secrets.
-## Local offline review
+## Local production and review
 
-Build a deterministic, provider-free episode and submit it to the local review
-database:
+Produce one configured episode through lesson generation, quality checks,
+local visual creation, FFmpeg rendering, media validation, private local
+storage, and the review queue:
 
 ```bash
 lattice-run-local configs/knowledge-channel.json
 ```
 
-The command writes a JSON artifact, a canonical `*.script.md` timed production
-script, and an asset manifest under
-`var/lattice-artifacts`, persists the episode in `var/lattice.sqlite`, and
-prints its `AWAITING_REVIEW` status. Every production-script scene contains a
-narration block, a standalone consistently themed Higgsfield visual prompt, and
-contiguous timing-synchronization beats. Use `--database`, `--output`, and
-`--history` to select local paths. It does not publish or contact external
-services; invalid configuration and pipeline failures are reported as
-non-zero, actionable errors.
+The default lesson provider is the configured Ollama model; start Ollama and
+install the model named in `production.ai_tools` before running. For a
+deterministic provider-free development run, add `--offline`. Use `--database`,
+`--output`, and `--history` to select local paths. The command produces one
+durable job per episode revision and exits nonzero if production fails. Rerun
+the command after a rejection to process that revision before selecting a new
+topic. Saved feedback, criteria, and timestamped markers reach the next lesson
+request and visual plan.
+
+The command writes the bundle, timed script, manifest, evidence, and temporary
+render assets under `var/lattice-artifacts/episodes/{id}/revision-{n}`. The
+review video, subtitles, lesson, and script live beneath
+`var/lattice-artifacts/review-media`, the default root of the local review
+server. Each revision uses distinct paths, preserving prior videos and
+artifacts. Per-revision database references and authenticated historical
+routes keep earlier videos and content accessible. The local runner validates
+configured stage order and required provider capabilities. The project brief
+and traits drive lesson and scene
+prompts. Production rejects model-authored claims labeled as externally
+supported, frozen video, and inaudible final audio. These checks cannot prove
+factual accuracy; human review remains required.
+
+Optional provider packages register factories under `lattice.lesson`,
+`lattice.research`, `lattice.visual`, `lattice.narration`, or `lattice.editor`
+entry-point groups, named by the configuration's `provider` field. Research,
+lesson, narration, and visual factories receive `(config, tool)`; editor
+factories receive `(config, tool, output_dir, tts, visual)`. An optional missing
+visual provider falls back to the local illustrated adapter. A required
+missing provider fails before production. The built-in Wikipedia research
+provider can ground the Ollama prompt when selected; its sources are retained
+for review, while model claims remain labeled model-generated until verified.
+
+## Server deployment
+
+Install optional dependencies, provision an empty PostgreSQL database and
+private S3-compatible bucket, then set secrets in the host environment:
+
+```bash
+pip install '.[server]'
+export LATTICE_DATABASE_URL='postgresql://user:password@db-host/lattice'
+export LATTICE_STORAGE_BUCKET='private-review-bucket'
+export LATTICE_STORAGE_PREFIX='lattice'
+export LATTICE_REVIEW_TOKEN='a-long-random-secret'
+lattice-server --host 127.0.0.1 --port 8765
+```
+
+`LATTICE_S3_ENDPOINT_URL` optionally selects an S3-compatible endpoint. Run
+`lattice-worker configs/knowledge-channel.json` as a separate service. On
+Linux, configure the `narration` capability with `provider: "piper"` and a
+local voice-model path; the example configuration uses Windows SAPI.
+`--once` processes one episode, and `--interval` sets the polling delay.
+Serve `/app` through an HTTPS reverse proxy with identity-based access
+control; keep the API bound to loopback or a private network. The page asks
+for the review token at runtime and keeps it in memory. Media and artifact
+requests pass through the authenticated API; the bucket remains private.
+
+The PostgreSQL contract test is opt-in: set `LATTICE_TEST_POSTGRES_URL` to a
+disposable database and run `python -m unittest discover -s tests` with the
+server dependencies installed. The default suite uses SQLite and a fake S3
+client, so it cannot verify a live PostgreSQL or cloud deployment.

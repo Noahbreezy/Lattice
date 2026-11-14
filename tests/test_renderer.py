@@ -70,6 +70,46 @@ class RendererTests(unittest.TestCase):
             self.assertLessEqual(static_metric["sample_count"], 32)
             self.assertEqual(static_metric["mean_abs_diff"], 0.0)
             self.assertGreater(moving_metric["mean_abs_diff"], 0.0)
+            report = check_media(static, require_motion=True)
+            self.assertIn("frozen-video", {issue.code for issue in report.issues})
+            self.assertIn(
+                "missing-captions",
+                {
+                    issue.code
+                    for issue in check_media(moving, require_captions=True).issues
+                },
+            )
+
+    def test_final_media_gate_rejects_silent_muxed_audio(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "silent.mp4"
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "testsrc=s=64x64:r=2",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "anullsrc=r=8000:cl=mono",
+                    "-t",
+                    "2",
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-c:a",
+                    "aac",
+                    str(output),
+                ],
+                check=True,
+                capture_output=True,
+            )
+            report = check_media(output, require_audible=True)
+            self.assertIn("inaudible-audio", {issue.code for issue in report.issues})
 
     def test_renderer_creates_private_mp4(self) -> None:
         config = load_config(

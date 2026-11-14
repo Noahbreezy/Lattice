@@ -5,12 +5,68 @@ from http.client import HTTPConnection
 from pathlib import Path
 from threading import Thread
 
+from test_storage import FakeS3
+
 from lattice.contracts import Episode, EpisodeStatus, Topic
 from lattice.local_api import create_review_server
 from lattice.persistence import EpisodeRepository
+from lattice.storage import S3ObjectStorage
 
 
 class LocalApiTests(unittest.TestCase):
+    def test_strict_server_keeps_private_s3_media_behind_bearer_token(self) -> None:
+        storage = S3ObjectStorage("review", client=FakeS3())
+        with tempfile.TemporaryDirectory() as directory:
+            video_path = Path(directory) / "video.mp4"
+            video_path.write_bytes(b"mp4")
+            video = storage.put_file("videos/episode-1/revision-1.mp4", video_path)
+            lesson = storage.put_json(
+                "lessons/episode-1/revision-1.json", {"kind": "lesson"}
+            )
+            repository = EpisodeRepository()
+            repository.save(
+                Episode(
+                    "episode-1",
+                    Topic("A topic", "systems"),
+                    EpisodeStatus.AWAITING_REVIEW,
+                    1,
+                    str(video.path),
+                    lesson_uri=str(lesson.path),
+                )
+            )
+            server = create_review_server(
+                repository,
+                port=0,
+                review_token="secret",
+                object_storage=storage,
+                strict_auth=True,
+            )
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            connection = HTTPConnection("127.0.0.1", server.server_port)
+            try:
+                connection.request("GET", "/media/episode-1")
+                response = connection.getresponse()
+                self.assertEqual(response.status, 401)
+                response.read()
+                headers = {"Authorization": "Bearer secret"}
+                connection.request("GET", "/media/episode-1", headers=headers)
+                response = connection.getresponse()
+                self.assertEqual(response.status, 200)
+                self.assertEqual(response.read(), b"mp4")
+                connection.request("GET", "/episodes/episode-1", headers=headers)
+                response = connection.getresponse()
+                self.assertIsNone(json.loads(response.read())["final_video_uri"])
+                connection.request("GET", "/episodes/episode-1/lesson", headers=headers)
+                response = connection.getresponse()
+                self.assertEqual(json.loads(response.read())["kind"], "lesson")
+            finally:
+                connection.close()
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+                repository.close()
+
     def test_mobile_review_app_and_queue_require_api_token(self) -> None:
         repository = EpisodeRepository()
         repository.save(

@@ -24,6 +24,7 @@ class LocalCliTests(unittest.TestCase):
                 str(path / "artifacts"),
                 "--history",
                 str(path / "history.json"),
+                "--offline",
             ]
             with patch.object(sys, "argv", arguments):
                 self.assertEqual(run_local_main(), 0)
@@ -32,10 +33,10 @@ class LocalCliTests(unittest.TestCase):
             self.assertEqual(len(episodes), 1)
             self.assertEqual(episodes[0].status, EpisodeStatus.AWAITING_REVIEW)
             self.assertTrue(Path(episodes[0].final_video_uri).is_file())
-            scripts = list((path / "artifacts").glob("*.script.md"))
+            scripts = list((path / "artifacts" / "episodes").rglob("*.script.md"))
             self.assertEqual(len(scripts), 1)
             self.assertIn(
-                "### Higgsfield visual prompt",
+                "### Visual prompt",
                 scripts[0].read_text(encoding="utf-8"),
             )
             self.assertTrue(

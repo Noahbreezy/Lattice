@@ -33,6 +33,15 @@ class Job:
     lease_until: str = ""
 
 
+@dataclass(frozen=True)
+class RevisionArtifacts:
+    episode_id: str
+    revision: int
+    video_uri: str
+    lesson_uri: str
+    script_uri: str
+
+
 class EpisodeRepository:
     """Persist reviewable episodes behind a database-neutral domain API.
 
@@ -208,6 +217,27 @@ class EpisodeRepository:
             raise RuntimeError("Queued episode disappeared while being claimed.")
         return claimed
 
+    def claim_episode(self, episode_id: str) -> Episode:
+        """Claim the episode named by a durable production job."""
+
+        with self._connection:
+            cursor = self._connection.execute(
+                "UPDATE episodes SET status = ?, queue_priority = NULL "
+                "WHERE id = ? AND status IN (?, ?)",
+                (
+                    EpisodeStatus.PROCESSING.value,
+                    episode_id,
+                    EpisodeStatus.QUEUED.value,
+                    EpisodeStatus.REJECTED.value,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError(f"Episode {episode_id} is not queued for production.")
+        claimed = self.get(episode_id)
+        if claimed is None:
+            raise RuntimeError("Claimed episode disappeared.")
+        return claimed
+
     def submit_for_review(
         self,
         episode: Episode,
@@ -229,7 +259,37 @@ class EpisodeRepository:
             script_uri=script_uri or episode.script_uri,
         )
         self.save(updated)
+        with self._connection:
+            self._connection.execute(
+                "INSERT INTO revision_artifacts "
+                "(episode_id, revision, video_uri, lesson_uri, script_uri) "
+                "VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(episode_id, revision) DO NOTHING",
+                (
+                    updated.id,
+                    updated.revision,
+                    updated.final_video_uri,
+                    updated.lesson_uri,
+                    updated.script_uri,
+                ),
+            )
         return updated
+
+    def artifacts_for_revision(
+        self, episode_id: str, revision: int
+    ) -> RevisionArtifacts | None:
+        row = self._connection.execute(
+            "SELECT * FROM revision_artifacts WHERE episode_id = ? AND revision = ?",
+            (episode_id, revision),
+        ).fetchone()
+        return RevisionArtifacts(**dict(row)) if row else None
+
+    def list_revision_artifacts(self, episode_id: str) -> tuple[RevisionArtifacts, ...]:
+        rows = self._connection.execute(
+            "SELECT * FROM revision_artifacts WHERE episode_id = ? ORDER BY revision",
+            (episode_id,),
+        ).fetchall()
+        return tuple(RevisionArtifacts(**dict(row)) for row in rows)
 
     def decide(
         self,
@@ -385,7 +445,7 @@ class EpisodeRepository:
             raise RuntimeError("Job disappeared after enqueue.")
         return _job_from_row(row)
 
-    def claim_job(self, kind: str | None = None) -> Job:
+    def claim_job(self, kind: str | None = None, job_id: str | None = None) -> Job:
         """Atomically claim the oldest queued job and increment its attempt count."""
 
         with self._connection:
@@ -394,6 +454,9 @@ class EpisodeRepository:
             if kind is not None:
                 query += " AND kind = ?"
                 params = (kind,)
+            if job_id is not None:
+                query += " AND id = ?"
+                params += (job_id,)
             query += " ORDER BY created_at ASC LIMIT 1"
             row = self._connection.execute(query, params).fetchone()
             if row is None:
@@ -519,6 +582,14 @@ class EpisodeRepository:
               reason TEXT NOT NULL,
               feedback TEXT NOT NULL DEFAULT '',
               created_at TEXT NOT NULL,
+              PRIMARY KEY (episode_id, revision)
+            );
+            CREATE TABLE IF NOT EXISTS revision_artifacts (
+              episode_id TEXT NOT NULL REFERENCES episodes(id),
+              revision INTEGER NOT NULL CHECK (revision > 0),
+              video_uri TEXT NOT NULL,
+              lesson_uri TEXT NOT NULL DEFAULT '',
+              script_uri TEXT NOT NULL DEFAULT '',
               PRIMARY KEY (episode_id, revision)
             );
             CREATE TABLE IF NOT EXISTS jobs (

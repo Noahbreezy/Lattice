@@ -18,6 +18,7 @@ from .contracts import (
     RenderJob,
     RenderJobStatus,
     ResearchPacket,
+    Review,
     SceneBeat,
     Script,
     ScriptSection,
@@ -28,11 +29,12 @@ from .contracts import (
     now_utc,
 )
 from .history import LessonHistory
-from .quality import require_lesson_quality
+from .quality import require_lesson_quality, require_script_quality
 from .research import (
     AILesson,
     AILessonProvider,
     create_configured_lesson_provider,
+    create_configured_research_provider,
 )
 from .visuals import IllustratedVisualProvider, VisualProvider
 
@@ -347,7 +349,7 @@ def build_storyboard(config: ProjectConfig, script: Script) -> Storyboard:
                 scene_id=f"scene-{index}",
                 script_section_heading=section.heading,
                 narration=section.text,
-                visual_direction=_visual_direction(section, script.topic),
+                visual_direction=_visual_direction(section, script.topic, config),
                 duration_seconds=duration,
                 timing_sync=_timing_sync(
                     section.text, duration, section.visual_description
@@ -372,7 +374,9 @@ def build_storyboard(config: ProjectConfig, script: Script) -> Storyboard:
     )
 
 
-def _visual_direction(section: ScriptSection, topic: Topic) -> str:
+def _visual_direction(
+    section: ScriptSection, topic: Topic, config: ProjectConfig
+) -> str:
     """Create a standalone provider-ready prompt for one explanatory scene."""
 
     explanation = section.visual_description or (
@@ -380,22 +384,16 @@ def _visual_direction(section: ScriptSection, topic: Topic) -> str:
         f"sequence: {section.text}"
     )
     return (
-        f"HIGGSFIELD SCENE PROMPT — Generate one high-quality 9:16 educational video "
-        f"scene about '{topic.title}'. Logical step: {section.heading}. "
-        "SHARED STYLE BIBLE: premium cinematic editorial animation grounded in a "
-        "physically coherent environment; deep navy, warm amber, and parchment palette; "
-        "soft directional light; restrained translucent explanatory overlays; smooth, "
-        "deliberate camera movement; realistic scale and motion; consistent recurring "
-        "subjects and locations across the complete video. "
-        "SCENE ACTION REFERENCE: use the following only for its subjects, setting, "
-        "actions, mechanism, and transition; the shared style bible overrides any "
-        "conflicting palette, lighting, rendering, aspect-ratio, or visible-text "
-        f"direction inside it. {explanation} "
+        f"VISUAL SCENE PROMPT — Generate one 9:16 {config.format} scene "
+        f"for {config.channel_name} about '{topic.title}'. Logical step: {section.heading}. "
+        f"PROJECT BRIEF: {config.lesson_prompt} "
+        f"SHARED STYLE BIBLE: {'; '.join(config.traits)}. Keep recurring subjects, "
+        "setting, palette, and lighting consistent across the complete video. "
+        f"SCENE ACTION REFERENCE: {explanation} "
         "Make the changing state, mechanism, comparison, or consequence visually "
         "unambiguous. Use a composed foreground, middle ground, and background; "
         "controlled camera movement; physically coherent subject motion; and a clear "
-        "visual handoff to the next scene. Preserve the shared subjects, environment, "
-        "lighting, rendering style, and palette exactly. "
+        "visual handoff to the next scene. Preserve the shared subjects and style. "
         "No baked-in captions, logos, watermarks, voiceover audio, or decorative stock "
         "footage. Do not show readable interface or prompt text. Reserve clean space "
         "for separately rendered captions."
@@ -500,7 +498,7 @@ def format_production_script(script: Script, storyboard: Storyboard) -> str:
         (
             "Visual continuity: every scene repeats the same style bible, palette, "
             "rendering rules, and continuity requirements in its standalone "
-            "Higgsfield prompt."
+            "visual prompt."
         ),
     ]
     global_start = 0
@@ -524,7 +522,7 @@ def format_production_script(script: Script, storyboard: Storyboard) -> str:
                 "",
                 f"> {scene.narration}",
                 "",
-                "### Higgsfield visual prompt",
+                "### Visual prompt",
                 "",
                 f"> {scene.visual_direction}",
                 "",
@@ -646,6 +644,8 @@ def build_production_bundle(
     research_provider: Callable[[Topic], ResearchPacket] | None = None,
     lesson_provider: AILessonProvider | None = None,
     offline: bool = False,
+    topic: Topic | None = None,
+    review: Review | None = None,
 ) -> ProductionBundle:
     """Build a complete provider-neutral render bundle for one episode.
 
@@ -653,7 +653,30 @@ def build_production_bundle(
     execution uses the configured lesson provider unless one is injected.
     """
 
-    topic = select_topic(config, history)
+    draft = generate_episode_draft(
+        config,
+        history,
+        research_provider=research_provider,
+        lesson_provider=lesson_provider,
+        offline=offline,
+        topic=topic,
+        review=review,
+    )
+    return assemble_production_bundle(config, draft, review=review)
+
+
+def generate_episode_draft(
+    config: ProjectConfig,
+    history: LessonHistory,
+    research_provider: Callable[[Topic], ResearchPacket] | None = None,
+    lesson_provider: AILessonProvider | None = None,
+    offline: bool = False,
+    topic: Topic | None = None,
+    review: Review | None = None,
+) -> EpisodeDraft:
+    """Generate the configured lesson and script for one selected topic."""
+
+    topic = topic or select_topic(config, history)
     if lesson_provider is not None:
         configured_provider = lesson_provider
     elif offline:
@@ -661,9 +684,35 @@ def build_production_bundle(
     else:
         configured_provider = create_configured_lesson_provider(config)
     if configured_provider is not None:
-        lesson = configured_provider.generate_lesson(topic, config)
+        source_provider = (
+            research_provider
+            if research_provider is not None
+            else create_configured_research_provider(config)
+        )
+        if source_provider is not None:
+            packet = (
+                source_provider(topic)
+                if callable(source_provider)
+                else source_provider.research(topic)
+            )
+            grounded_generator = getattr(
+                configured_provider, "generate_grounded_lesson", None
+            )
+            if not callable(grounded_generator):
+                raise ValueError(
+                    "Configured lesson provider cannot consume research context."
+                )
+            lesson = grounded_generator(topic, config, packet, review)
+        else:
+            revision_generator = getattr(configured_provider, "generate_revision", None)
+            lesson = (
+                revision_generator(topic, config, review)
+                if review is not None and callable(revision_generator)
+                else configured_provider.generate_lesson(topic, config)
+            )
         research = lesson.to_research_packet()
         script = build_script_from_lesson(config, lesson)
+        require_script_quality(config, research, script)
     else:
         research = (
             research_provider(topic)
@@ -671,8 +720,26 @@ def build_production_bundle(
             else build_demo_research_packet(topic)
         )
         script = build_script(config, research)
-    draft = EpisodeDraft(topic=topic, research=research, script=script)
+    return EpisodeDraft(topic=topic, research=research, script=script)
+
+
+def assemble_production_bundle(
+    config: ProjectConfig, draft: EpisodeDraft, review: Review | None = None
+) -> ProductionBundle:
+    """Turn a checked draft into scenes, assets, and a render job."""
+
     storyboard = build_storyboard(config, draft.script)
+    if review is not None:
+        directions = [review.feedback, *review.criteria]
+        directions.extend(
+            f"{marker.start_seconds}-{marker.end_seconds}s ({marker.criterion}): {marker.comment}"
+            for marker in review.markers
+        )
+        storyboard = regenerate_scenes(
+            storyboard,
+            {scene.scene_id for scene in storyboard.scenes},
+            "; ".join(item for item in directions if item.strip()),
+        )
     assets = build_asset_manifest(storyboard)
     return ProductionBundle(
         draft=draft,
