@@ -8,7 +8,7 @@ import tempfile
 from dataclasses import replace
 from pathlib import Path
 
-from .contracts import PublishedVideo, RenderJob, RenderJobStatus
+from .contracts import AssetReference, PublishedVideo, RenderJob, RenderJobStatus
 from .pipeline import publish_video
 from .tts import (
     Narration,
@@ -66,7 +66,7 @@ class FfmpegRenderer:
                     math.ceil(narration.duration_seconds),
                     sum(scene.duration_seconds for scene in job.storyboard.scenes),
                 )
-            subtitle_path.write_text(_srt(job, narration), encoding="utf-8")
+            subtitle_path.write_text(_srt(job), encoding="utf-8")
             command = _render_command(
                 self.ffmpeg,
                 job,
@@ -105,7 +105,7 @@ def _render_command(
     supports_svg = _supports_svg(ffmpeg)
     inputs: list[str] = [ffmpeg, "-y"]
     labels: list[str] = []
-    for index, scene in enumerate(job.storyboard.scenes):
+    for index in range(len(job.storyboard.scenes)):
         asset = job.asset_manifest.assets[index]
         if supports_svg or not asset.uri.endswith(".txt"):
             inputs.extend(["-loop", "1", "-framerate", "30", "-i", asset.uri])
@@ -121,8 +121,8 @@ def _render_command(
             ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"]
         )
         audio_label = f"{len(job.storyboard.scenes)}:a"
-    filters = []
-    for index, _scene in enumerate(job.storyboard.scenes):
+    filters: list[str] = []
+    for index in range(len(job.storyboard.scenes)):
         accent = "0xfbbf24" if index % 2 == 0 else "0x67e8f9"
         if supports_svg or not job.asset_manifest.assets[index].uri.endswith(".txt"):
             visual = f"[{index}:v]scale=1080:1920"
@@ -183,7 +183,7 @@ def _ffmpeg_path(path: str) -> str:
 def _materialize_assets(
     job: RenderJob, directory: Path, provider: VisualProvider
 ) -> RenderJob:
-    assets = []
+    assets: list[AssetReference] = []
     for index, asset in enumerate(job.asset_manifest.assets):
         if Path(asset.uri).is_file() and asset.uri.endswith(".svg"):
             assets.append(asset)
@@ -191,7 +191,7 @@ def _materialize_assets(
         created = provider.create(job.storyboard.scenes[index], directory / "assets")
         assets.append(created)
     if not _supports_svg("ffmpeg"):
-        fallback_assets = []
+        fallback_assets: list[AssetReference] = []
         for index, asset in enumerate(assets):
             if not asset.uri.endswith(".svg"):
                 fallback_assets.append(asset)
@@ -215,7 +215,7 @@ def _materialize_assets(
     )
 
 
-def _srt(job: RenderJob, narration: Narration | None = None) -> str:
+def _srt(job: RenderJob) -> str:
     lines: list[str] = []
     elapsed = 0
     for index, scene in enumerate(job.storyboard.scenes, start=1):

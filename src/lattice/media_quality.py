@@ -111,11 +111,15 @@ def check_media(
             )
         )
     metrics = measure_animation(media) if video is not None else None
+    sample_count = metrics.get("sample_count") if metrics is not None else None
     if (
         require_motion
         and video is not None
         and metrics is not None
-        and (metrics.get("sample_count", 0) < 2 or metrics.get("max_abs_diff", 0) == 0)
+        and (
+            isinstance(sample_count, int) and sample_count < 2
+            or metrics.get("max_abs_diff", 0) == 0
+        )
     ):
         issues.append(MediaIssue("frozen-video", "Video frames show no motion."))
     if require_audible and audio is not None:

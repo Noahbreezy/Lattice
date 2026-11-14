@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 from .contracts import Episode, EpisodeStatus
 from .media_quality import check_media
@@ -75,7 +76,7 @@ def store_rendered_episode(
     lesson = bundle.draft.research
     stored_lesson = storage.put_json(
         f"lessons/{episode.id}/{revision_name}.json",
-        {
+        cast(dict[str, object], {
             "schema_version": 1,
             "kind": "lesson",
             "episode_id": episode.id,
@@ -111,7 +112,7 @@ def store_rendered_episode(
                 }
                 for item in lesson.sources
             ],
-        },
+        }),
     )
     script = bundle.draft.script
     stored_script = storage.put_json(

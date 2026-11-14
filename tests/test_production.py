@@ -49,6 +49,7 @@ class ProductionTests(unittest.TestCase):
             self.assertEqual(script["kind"], "script")
             self.assertIn("production_script", script)
             persisted = repository.get(result.id)
+            assert persisted is not None
             self.assertEqual(persisted.lesson_uri, result.lesson_uri)
             self.assertEqual(persisted.script_uri, result.script_uri)
             repository.close()

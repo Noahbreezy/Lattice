@@ -16,7 +16,7 @@ from lattice.pipeline import (
     create_render_job,
 )
 from lattice.renderer import FfmpegRenderer
-from lattice.tts import Narration, _proportional_timings
+from lattice.tts import Narration, proportional_timings
 
 
 class FixtureTts:
@@ -30,7 +30,7 @@ class FixtureTts:
         duration = 30.0
         words = text.split()
         return Narration(
-            str(path), duration, _proportional_timings(words, duration), "fixture"
+            str(path), duration, proportional_timings(words, duration), "fixture"
         )
 
 
@@ -67,6 +67,8 @@ class RendererTests(unittest.TestCase):
                 )
             static_metric = measure_animation(static)
             moving_metric = measure_animation(moving)
+            assert isinstance(static_metric["sample_count"], int)
+            assert isinstance(moving_metric["mean_abs_diff"], float)
             self.assertLessEqual(static_metric["sample_count"], 32)
             self.assertEqual(static_metric["mean_abs_diff"], 0.0)
             self.assertGreater(moving_metric["mean_abs_diff"], 0.0)
@@ -127,6 +129,7 @@ class RendererTests(unittest.TestCase):
             self.assertGreater(Path(video.uri).stat().st_size, 0)
             self.assertEqual(len(tuple(Path(directory).glob("*.srt"))), 1)
             self.assertIsNotNone(renderer.last_job)
+            assert renderer.last_job is not None
             expected_duration = sum(
                 scene.duration_seconds for scene in renderer.last_job.storyboard.scenes
             )

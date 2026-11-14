@@ -8,11 +8,12 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum
+from typing import cast
 
 from .config import ConfigError
 
 
-def _text(value: str, field: str) -> str:
+def _text(value: object, field: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ConfigError(f"{field} must be a non-empty string.")
     return value.strip()
@@ -42,7 +43,7 @@ class ArtifactProvenance:
 
     def __post_init__(self) -> None:
         _text(self.artifact_id, "provenance.artifact_id")
-        if not isinstance(self.artifact_version, int) or self.artifact_version < 1:
+        if not isinstance(cast(object, self.artifact_version), int) or self.artifact_version < 1:
             raise ConfigError("provenance.artifact_version must be positive.")
         for field in (
             "config_version",
@@ -54,7 +55,7 @@ class ArtifactProvenance:
             if value and not isinstance(value, str):
                 raise ConfigError(f"provenance.{field} must be a string.")
         if any(
-            not isinstance(value, str) or not value.strip()
+            not isinstance(cast(object, value), str) or not value.strip()
             for value in self.input_artifact_ids
         ):
             raise ConfigError(
@@ -194,9 +195,9 @@ class Script:
             raise ConfigError("script.sections must contain at least one section.")
         if self.estimated_duration_seconds < 1:
             raise ConfigError("script.estimated_duration_seconds must be positive.")
-        if not isinstance(self.source_claim_count, int) or self.source_claim_count < 1:
+        if not isinstance(cast(object, self.source_claim_count), int) or self.source_claim_count < 1:
             raise ConfigError("script.source_claim_count must be positive.")
-        if not isinstance(self.version, int) or self.version < 1:
+        if not isinstance(cast(object, self.version), int) or self.version < 1:
             raise ConfigError("script.version must be positive.")
 
 
@@ -274,13 +275,13 @@ class Storyboard:
     def __post_init__(self) -> None:
         if not self.scenes:
             raise ConfigError("storyboard.scenes must contain at least one scene.")
-        if not isinstance(self.version, int) or self.version < 1:
+        if not isinstance(cast(object, self.version), int) or self.version < 1:
             raise ConfigError("storyboard.version must be positive.")
         if len({scene.scene_id for scene in self.scenes}) != len(self.scenes):
             raise ConfigError("storyboard scene IDs must be unique.")
         if self.maximum_duration_seconds is not None:
             if (
-                not isinstance(self.maximum_duration_seconds, int)
+                not isinstance(cast(object, self.maximum_duration_seconds), int)
                 or isinstance(self.maximum_duration_seconds, bool)
                 or self.maximum_duration_seconds < 1
             ):
@@ -314,7 +315,7 @@ class AssetManifest:
     provenance: ArtifactProvenance | None = None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.version, int) or self.version < 1:
+        if not isinstance(cast(object, self.version), int) or self.version < 1:
             raise ConfigError("asset_manifest.version must be positive.")
         if not self.assets:
             raise ConfigError("asset_manifest.assets must contain at least one asset.")
@@ -340,11 +341,11 @@ class RenderJob:
 
     def __post_init__(self) -> None:
         _text(self.job_id, "render_job.job_id")
-        if not isinstance(self.version, int) or self.version < 1:
+        if not isinstance(cast(object, self.version), int) or self.version < 1:
             raise ConfigError("render_job.version must be positive.")
 
     def transition_to(self, status: RenderJobStatus) -> RenderJob:
-        allowed = {
+        allowed: dict[RenderJobStatus, tuple[RenderJobStatus, ...]] = {
             RenderJobStatus.QUEUED: (RenderJobStatus.RUNNING, RenderJobStatus.FAILED),
             RenderJobStatus.RUNNING: (
                 RenderJobStatus.SUCCEEDED,
@@ -379,13 +380,13 @@ class PublishedVideo:
     def __post_init__(self) -> None:
         for field in ("video_id", "render_job_id", "uri"):
             _text(getattr(self, field), f"published_video.{field}")
-        if not isinstance(self.version, int) or self.version < 1:
+        if not isinstance(cast(object, self.version), int) or self.version < 1:
             raise ConfigError("published_video.version must be positive.")
         if self.approval_state == ApprovalState.APPROVED and not self.uri:
             raise ConfigError("published_video.uri is required when approved.")
 
     def transition_to(self, approval_state: ApprovalState) -> PublishedVideo:
-        allowed = {
+        allowed: dict[ApprovalState, tuple[ApprovalState, ...]] = {
             ApprovalState.PENDING: (ApprovalState.APPROVED, ApprovalState.REJECTED),
             ApprovalState.APPROVED: (),
             ApprovalState.REJECTED: (ApprovalState.PENDING,),
@@ -487,7 +488,7 @@ class Review:
             raise ConfigError(
                 "rejected reviews require feedback, criteria, or markers."
             )
-        if any(not isinstance(item, str) or not item.strip() for item in self.criteria):
+        if any(not isinstance(cast(object, item), str) or not item.strip() for item in self.criteria):
             raise ConfigError("review.criteria must contain non-empty strings.")
 
 

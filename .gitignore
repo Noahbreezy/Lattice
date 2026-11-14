@@ -8,3 +8,5 @@ build/
 dist/
 *.egg-info/
 var/
+.codex/vscode-problems*.json
+.codex/fix-vscode-problems-progress.json

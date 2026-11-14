@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import json
 import unittest
 from pathlib import Path
+from urllib.request import Request
 from unittest.mock import patch
 
 from lattice.config import load_config
@@ -16,32 +19,34 @@ from lattice.contracts import (
 from lattice.research import (
     OllamaLessonProvider,
     WikipediaResearchProvider,
-    _lesson_prompt,
+    lesson_prompt,
     create_configured_lesson_provider,
     create_configured_research_provider,
 )
 
 
 class _Response:
-    def __init__(self, value):
+    def __init__(self, value: dict[str, object]) -> None:
         self.value = value
 
-    def __enter__(self):
+    def __enter__(self) -> _Response:
         return self
 
-    def __exit__(self, *_args):
+    def __exit__(self, exc_type: object, exc_value: object, traceback: object) -> None:
+        del exc_type, exc_value, traceback
         return None
 
-    def read(self):
+    def read(self) -> bytes:
         return json.dumps({"response": json.dumps(self.value)}).encode()
 
 
 class _CapturingOpener:
-    def __init__(self, value):
+    def __init__(self, value: dict[str, object]) -> None:
         self.value = value
-        self.request = None
+        self.request: Request | None = None
 
-    def __call__(self, request, **_kwargs):
+    def __call__(self, request: Request, **_kwargs: object) -> _Response:
+        del _kwargs
         self.request = request
         return _Response(self.value)
 
@@ -51,7 +56,7 @@ class AiLessonTests(unittest.TestCase):
         config = load_config(
             Path(__file__).parents[1] / "configs" / "knowledge-channel.json"
         )
-        response = {
+        response: dict[str, object] = {
             "summary": "A revised explanation.",
             "uncertainty": "This remains a simplified example.",
             "sections": [
@@ -81,6 +86,7 @@ class AiLessonTests(unittest.TestCase):
             (ReviewMarker(1, 3, "pacing", "Show the consequence sooner."),),
         )
         provider.generate_revision(Topic("Path dependence", "systems"), config, review)
+        assert opener.request is not None and isinstance(opener.request.data, bytes)
         prompt = json.loads(opener.request.data)["prompt"]
         self.assertIn("Clarify the causal transition", prompt)
         self.assertIn("explanatory clarity", prompt)
@@ -91,7 +97,7 @@ class AiLessonTests(unittest.TestCase):
         config = load_config(
             Path(__file__).parents[1] / "configs" / "knowledge-channel.json"
         )
-        prompt = _lesson_prompt(Topic("Path dependence", "systems"), config)
+        prompt = lesson_prompt(Topic("Path dependence", "systems"), config)
         self.assertIn("no longer than 179 seconds", prompt)
         self.assertIn(config.lesson_prompt, prompt)
         self.assertIn("high information density without rushing", prompt)
@@ -102,7 +108,7 @@ class AiLessonTests(unittest.TestCase):
         config = load_config(
             Path(__file__).parents[1] / "configs" / "knowledge-channel.json"
         )
-        response = {
+        response: dict[str, object] = {
             "summary": "A concise lesson.",
             "uncertainty": "Examples are simplified.",
             "sections": [
@@ -142,6 +148,7 @@ class AiLessonTests(unittest.TestCase):
         self.assertEqual(
             lesson.to_research_packet().sources[0].source_type, "ai-generated"
         )
+        assert opener.request is not None and isinstance(opener.request.data, bytes)
         request_payload = json.loads(opener.request.data)
         self.assertIs(request_payload["think"], False)
 
@@ -149,7 +156,7 @@ class AiLessonTests(unittest.TestCase):
         config = load_config(
             Path(__file__).parents[1] / "configs" / "knowledge-channel.json"
         )
-        response = {
+        response: dict[str, object] = {
             "summary": "A concise lesson.",
             "uncertainty": "Examples are simplified.",
             "sections": [
@@ -166,7 +173,7 @@ class AiLessonTests(unittest.TestCase):
             ],
         }
         provider = OllamaLessonProvider(
-            "test-model", opener=lambda *_args, **_kwargs: _Response(response)
+            "test-model", opener=_CapturingOpener(response)
         )
         with self.assertRaisesRegex(RuntimeError, "visual description"):
             provider.generate_lesson(Topic("Path dependence", "systems"), config)
@@ -177,7 +184,7 @@ class AiLessonTests(unittest.TestCase):
         )
         provider = OllamaLessonProvider(
             "test-model",
-            opener=lambda *_args, **_kwargs: _Response(
+            opener=_CapturingOpener(
                 {
                     "summary": "bad",
                     "uncertainty": "",
@@ -193,7 +200,7 @@ class AiLessonTests(unittest.TestCase):
         config = load_config(
             Path(__file__).parents[1] / "configs" / "knowledge-channel.json"
         )
-        sections = []
+        sections: list[dict[str, str]] = []
         for heading in config.required_sections:
             sections.append(
                 {
@@ -213,7 +220,7 @@ class AiLessonTests(unittest.TestCase):
             )
         provider = OllamaLessonProvider(
             "test-model",
-            opener=lambda *_args, **_kwargs: _Response(
+            opener=_CapturingOpener(
                 {
                     "summary": "A concise lesson.",
                     "uncertainty": "Examples are simplified.",
@@ -237,6 +244,7 @@ class AiLessonTests(unittest.TestCase):
         )
         provider = create_configured_lesson_provider(config)
         self.assertIsInstance(provider, OllamaLessonProvider)
+        assert isinstance(provider, OllamaLessonProvider)
         self.assertEqual(provider.model, "qwen3:4b")
         self.assertEqual(provider.endpoint, "http://127.0.0.1:11434/api/generate")
 
@@ -268,8 +276,11 @@ class AiLessonTests(unittest.TestCase):
             for tool in config.ai_tools
         )
         sentinel = object()
+        def make_sentinel(*args: object) -> object:
+            del args
+            return sentinel
         with patch(
-            "lattice.research.provider_factory", return_value=lambda *_: sentinel
+            "lattice.research.provider_factory", return_value=make_sentinel
         ):
             self.assertIs(
                 create_configured_lesson_provider(replace(config, ai_tools=tools)),
@@ -295,7 +306,7 @@ class AiLessonTests(unittest.TestCase):
             (Claim("A limited claim.", "supported", (0,)),),
             "2026-01-01T00:00:00Z",
         )
-        response = {
+        response: dict[str, object] = {
             "summary": "A limited explanation.",
             "uncertainty": "The example is simplified.",
             "sections": [
@@ -322,6 +333,7 @@ class AiLessonTests(unittest.TestCase):
             config,
             packet,
         )
+        assert opener.request is not None and isinstance(opener.request.data, bytes)
         self.assertIn(
             "https://example.org/ref", json.loads(opener.request.data)["prompt"]
         )

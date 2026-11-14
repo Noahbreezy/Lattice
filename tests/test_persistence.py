@@ -21,6 +21,7 @@ class EpisodeRepositoryTests(unittest.TestCase):
             episode = Episode("episode-1", self.topic, EpisodeStatus.QUEUED, 1)
             repository.save(episode)
             persisted = repository.get("episode-1")
+            assert persisted is not None
             self.assertEqual(persisted.id, episode.id)
             self.assertEqual(persisted.topic, episode.topic)
             self.assertEqual(persisted.status, episode.status)
@@ -38,6 +39,7 @@ class EpisodeRepositoryTests(unittest.TestCase):
         )
         self.repository.save(episode)
         persisted = self.repository.get(episode.id)
+        assert persisted is not None
         self.assertEqual(persisted.lesson_uri, "private://lesson.json")
         self.assertEqual(persisted.script_uri, "private://script.json")
 
@@ -61,7 +63,7 @@ class EpisodeRepositoryTests(unittest.TestCase):
             repository = EpisodeRepository(database)
             columns = {
                 row["name"]
-                for row in repository._connection.execute("PRAGMA table_info(episodes)")
+                for row in repository.connection.execute("PRAGMA table_info(episodes)")
             }
             self.assertIn("lesson_uri", columns)
             self.assertIn("script_uri", columns)
@@ -90,8 +92,10 @@ class EpisodeRepositoryTests(unittest.TestCase):
         )
         self.repository.save(episode)
         awaiting = self.repository.submit_for_review(episode, "private://final.mp4")
+        artifacts = self.repository.artifacts_for_revision("episode-1", 1)
+        assert artifacts is not None
         self.assertEqual(
-            self.repository.artifacts_for_revision("episode-1", 1).video_uri,
+            artifacts.video_uri,
             "private://final.mp4",
         )
         updated, review = self.repository.decide(
@@ -129,6 +133,7 @@ class EpisodeRepositoryTests(unittest.TestCase):
             awaiting, "owner-subject", ReviewDecision.APPROVE
         )
         persisted = self.repository.get("episode-1")
+        assert persisted is not None
         self.assertEqual(approved.status, EpisodeStatus.APPROVED)
         self.assertEqual(persisted.final_video_uri, "private://final.mp4")
         with self.assertRaises(LookupError):

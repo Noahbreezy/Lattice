@@ -61,6 +61,7 @@ class RenderProvider(Protocol):
 
     def render(self, job: RenderJob) -> PublishedVideo:
         """Render a job and return an unapproved private video artifact."""
+        ...
 
 
 def select_topic(config: ProjectConfig, history: LessonHistory) -> Topic:
@@ -341,7 +342,7 @@ def build_storyboard(config: ProjectConfig, script: Script) -> Storyboard:
             key=lambda item: durations[item] - exact_durations[item],
         )
         durations[index] -= 1
-    scene_items = []
+    scene_items: list[StoryboardScene] = []
     for index, section in enumerate(script.sections, start=1):
         duration = durations[index - 1]
         scene_items.append(
@@ -710,6 +711,8 @@ def generate_episode_draft(
                 if review is not None and callable(revision_generator)
                 else configured_provider.generate_lesson(topic, config)
             )
+        if not isinstance(lesson, AILesson):
+            raise TypeError("Lesson provider must return an AILesson.")
         research = lesson.to_research_packet()
         script = build_script_from_lesson(config, lesson)
         require_script_quality(config, research, script)

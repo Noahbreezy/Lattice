@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import platform
 import re
-import sys
-from collections.abc import Iterable, Iterator
+from importlib import import_module
+from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Callable, cast
 
 from .contracts import Topic
 
@@ -57,20 +59,23 @@ class LessonHistory:
             raise ValueError(
                 f"Could not read lesson history {self.path}: {exc}"
             ) from exc
-        if not isinstance(value, list) or any(
-            not isinstance(item, str) for item in value
-        ):
+        if not isinstance(value, list):
             raise ValueError(
                 f"Lesson history {self.path} must contain an array of strings."
             )
-        return {_normalize(item) for item in value}
+        items = cast(list[object], value)
+        if any(not isinstance(item, str) for item in items):
+            raise ValueError(
+                f"Lesson history {self.path} must contain an array of strings."
+            )
+        return {_normalize(item) for item in items if isinstance(item, str)}
 
     @contextmanager
-    def _lock(self) -> Iterator[None]:
+    def _lock(self) -> Generator[None]:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         lock_path = self.path.with_name(f"{self.path.name}.lock")
         with lock_path.open("a+b") as lock_file:
-            if sys.platform == "win32":
+            if platform.system() == "Windows":
                 import msvcrt
 
                 lock_file.seek(0)
@@ -78,18 +83,19 @@ class LessonHistory:
                 lock_file.flush()
                 lock_file.seek(0)
                 msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+                def unlock() -> None:
+                    lock_file.seek(0)
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
             else:
-                import fcntl
-
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                fcntl = import_module("fcntl")
+                flock = cast(Callable[[int, int], None], getattr(fcntl, "flock"))
+                flock(lock_file.fileno(), cast(int, getattr(fcntl, "LOCK_EX")))
+                def unlock() -> None:
+                    flock(lock_file.fileno(), cast(int, getattr(fcntl, "LOCK_UN")))
             try:
                 yield
             finally:
-                if sys.platform == "win32":
-                    lock_file.seek(0)
-                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
-                else:
-                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                unlock()
 
 
 def _normalize(value: str) -> str:
