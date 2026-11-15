@@ -14,6 +14,38 @@ from lattice.storage import S3ObjectStorage
 
 
 class LocalApiTests(unittest.TestCase):
+    def test_artifact_feedback_is_saved_by_kind_and_revision(self) -> None:
+        repository = EpisodeRepository()
+        repository.save(Episode("episode-1", Topic("A topic", "systems"), EpisodeStatus.PROCESSING, 2))
+        server = create_review_server(repository, port=0, review_token="secret")
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        headers = {"Authorization": "Bearer secret", "Content-Type": "application/json"}
+        try:
+            for kind in ("lesson", "script", "video"):
+                body = {"revision": 2, "kind": kind, "comment": "Improve this section", "reviewer_id": "owner"}
+                if kind == "video":
+                    body["start_seconds"] = 12
+                connection.request("POST", "/episodes/episode-1/feedback", json.dumps(body), headers)
+                response = connection.getresponse()
+                self.assertEqual(response.status, 201)
+                response.read()
+            connection.request("GET", "/episodes/episode-1/feedback", headers=headers)
+            response = connection.getresponse()
+            self.assertEqual(response.status, 200)
+            entries = json.loads(response.read())
+            self.assertEqual({entry["kind"] for entry in entries}, {"lesson", "script", "video"})
+            self.assertEqual(entries[0]["start_seconds"], 12)
+            connection.request("POST", "/episodes/episode-1/feedback", json.dumps({"revision": 3, "kind": "lesson", "comment": "Invalid", "reviewer_id": "owner"}), headers)
+            self.assertEqual(connection.getresponse().status, 400)
+        finally:
+            connection.close()
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+            repository.close()
+
     def test_strict_server_keeps_private_s3_media_behind_bearer_token(self) -> None:
         storage = S3ObjectStorage("review", client=FakeS3())
         with tempfile.TemporaryDirectory() as directory:
@@ -87,13 +119,15 @@ class LocalApiTests(unittest.TestCase):
         response = connection.getresponse()
         self.assertEqual(response.status, 200)
         app = response.read()
-        self.assertIn(b"playsinline", app)
+        self.assertIn(b"playsInline", app)
         self.assertIn(b"Approve", app)
         self.assertIn(b"Reject", app)
-        self.assertIn(b"fetch('/review-queue'", app)
+        self.assertIn(b"api('/review-queue'", app)
         self.assertIn(b"fetch('/media/'", app)
         self.assertIn(b"response.blob()", app)
         self.assertIn(b"load()", app)
+        self.assertIn(b"Leave feedback", app)
+        self.assertIn(b"Video script", app)
         connection.request("GET", "/review-queue")
         self.assertEqual(connection.getresponse().status, 401)
         connection.request(

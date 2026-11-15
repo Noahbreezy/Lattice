@@ -62,6 +62,14 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
             )
             return
         if path.startswith("/episodes/"):
+            feedback_route = re.fullmatch(r"/episodes/([^/]+)/feedback", path)
+            if feedback_route:
+                episode_id = feedback_route.group(1)
+                if self.repository.get(episode_id) is None:
+                    self._write(HTTPStatus.NOT_FOUND, {"error": "Episode not found."})
+                else:
+                    self._write(HTTPStatus.OK, self.repository.feedback_for(episode_id))
+                return
             historical_artifact = re.fullmatch(
                 r"/episodes/([^/]+)/revisions/(\d+)/(lesson|script)", path
             )
@@ -124,6 +132,25 @@ class ReviewApiHandler(BaseHTTPRequestHandler):
         if not self._authorized():
             return
         path = urlparse(self.path).path
+        feedback_route = re.fullmatch(r"/episodes/([^/]+)/feedback", path)
+        if feedback_route:
+            episode_id = feedback_route.group(1)
+            if self.repository.get(episode_id) is None:
+                self._write(HTTPStatus.NOT_FOUND, {"error": "Episode not found."})
+                return
+            try:
+                payload = self._read_json()
+                item = self.repository.add_artifact_feedback(
+                    episode_id, int(payload["revision"]), str(payload["kind"]),
+                    str(payload["comment"]),
+                    self.owner_id if self.strict_auth else str(payload["reviewer_id"]).strip(),
+                    payload.get("start_seconds"),
+                )
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                self._write(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
+            self._write(HTTPStatus.CREATED, item)
+            return
         if not path.startswith("/episodes/") or not path.endswith("/review"):
             self._write(HTTPStatus.NOT_FOUND, {"error": "Route not found."})
             return
@@ -447,53 +474,4 @@ def create_review_server(
     return ThreadingHTTPServer((host, port), ConfiguredReviewApiHandler)
 
 
-_REVIEW_APP = """<!doctype html>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Lattice review</title>
-<style>
-body{font:16px system-ui;background:#0f172a;color:#e2e8f0;max-width:640px;margin:auto;padding:16px}
-video{width:100%;border-radius:16px;background:#020617}button,textarea{font:1rem;padding:12px;border-radius:10px}
-button{border:0;margin:6px 4px 6px 0}.approve{background:#86efac}.reject{background:#fca5a5}
-textarea,input{width:96%;min-height:40px;padding:8px;box-sizing:border-box}.card{background:#1e293b;padding:16px;border-radius:16px;margin-top:16px}
-nav{display:flex;gap:8px;overflow-x:auto;padding:8px 0}nav button{flex:0 0 auto;background:#334155;color:#e2e8f0}
-nav button[aria-current="true"]{background:#fbbf24;color:#0f172a}.actions{display:flex;gap:8px}.actions button{flex:1}
-</style>
-<h1>Lattice review</h1><label>Bearer token (kept in memory only)
-<input id="token" type="password" autocomplete="off"></label>
-<p id="status">Loading queue...</p><nav id="queue"></nav><main id="card"></main>
-<script>
-let item,q=[],selected=0,videoUrl='';
-const $=id=>document.querySelector(id);
-function headers(){const token=$('#token').value.trim(); return token?{'Authorization':'Bearer '+token}:{}}
-async function load(){const r=await fetch('/review-queue',{headers:headers()});
- if(!r.ok){$('#status').textContent='Unable to load queue ('+r.status+').';return}
- q=await r.json(); if(selected>=q.length)selected=0; show()}
-async function show(){item=q[selected]; const nav=$('#queue'); nav.replaceChildren();
- q.forEach((entry,index)=>{const button=document.createElement('button');
- button.textContent=entry.topic+' - '+entry.revision;button.setAttribute('aria-current',String(index===selected));
- button.onclick=()=>{selected=index;show()};nav.append(button)});
- if(!item){$('#status').textContent='No videos waiting for review.';$('#card').textContent='';return}
- $('#status').textContent=item.topic+' - revision '+item.revision;
- $('#card').innerHTML='<div class="card"><video controls playsinline></video>'+
- '<p>Reject criteria (comma separated)</p><input id="criteria" placeholder="visual_clarity, pacing">'+
- '<textarea id="feedback" placeholder="Optional feedback"></textarea><br>'+
- '<label>Start <input id="start" type="number" min="0" value="0"></label>'+
- '<label>End <input id="end" type="number" min="1" value="5"></label><br>'+
- '<button type="button" onclick="useVideoTime()">Mark current video time</button><br>'+
- '<div class="actions"><button class="approve" onclick="decide(\\'approve\\')">Approve</button>'+
- '<button class="reject" onclick="decide(\\'reject\\')">Reject</button></div></div>';
- const video=$('#card video');
- const response=await fetch('/media/'+encodeURIComponent(item.id),{headers:headers()});
- if(!response.ok){$('#status').textContent='Unable to load video ('+response.status+').';return}
- if(videoUrl)URL.revokeObjectURL(videoUrl);
- videoUrl=URL.createObjectURL(await response.blob());video.src=videoUrl;
- video.load()}
-function useVideoTime(){const second=Math.floor($('#card video').currentTime||0);
- $('#start').value=second;$('#end').value=second+5}
-async function decide(decision){const criteria=$('#criteria').value.split(',').map(x=>x.trim()).filter(Boolean);
- const feedback=$('#feedback').value; const start=Number($('#start').value);
- const end=Number($('#end').value); const markers=criteria.length?[{start_seconds:start,end_seconds:end,criterion:criteria[0],comment:feedback}]:[];
- const r=await fetch('/episodes/'+encodeURIComponent(item.id)+'/review',{method:'POST',
- headers:Object.assign({'Content-Type':'application/json'},headers()),body:JSON.stringify({decision,reviewer_id:'owner',criteria,markers,feedback})});
- if(!r.ok){alert((await r.json()).error);return} load()} $('#token').addEventListener('change',load); load();
-</script>"""
+_REVIEW_APP = Path(__file__).with_name("review_dashboard.html").read_text(encoding="utf-8")

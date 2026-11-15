@@ -186,7 +186,13 @@ The API exposes `GET /health`, `GET /episodes`, `GET /review-queue`,
 `end_seconds`, `criterion`, and optional `comment`. Set
 `LATTICE_REVIEW_TOKEN` before use; requests
 then require the configured bearer token in the `Authorization` header. This is a local adapter,\r\nnot a public deployment authentication system.
-`GET /app` serves a minimal mobile-friendly review page for the local adapter.
+`GET /app` serves the feedback dashboard. Open `http://127.0.0.1:8765/app`
+after starting the review server. Select an episode and its Lesson, Video script,
+or Video tab to inspect the generated artifact and save a comment. Video
+comments can include a timestamp. Feedback is stored by episode, revision, and
+artifact type and remains visible in the feedback history. A separate final
+video decision approves the episode or rejects it for another revision.
+The dashboard uses `GET` and `POST /episodes/{id}/feedback` for comments.
 Rejected decisions increment the episode revision and persist an immutable
 revision record containing the feedback that caused the rework.
 

@@ -23,6 +23,9 @@ lattice-worker = "lattice.deployment:worker_main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+lattice = ["review_dashboard.html"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 norecursedirs = [".*", "build", "dist", "var"]
