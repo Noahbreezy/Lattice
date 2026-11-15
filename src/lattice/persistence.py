@@ -425,6 +425,29 @@ class EpisodeRepository:
             for row in rows
         )
 
+    def add_artifact_feedback(self, episode_id: str, revision: int, kind: str, comment: str, reviewer_id: str, start_seconds: int | None = None) -> dict[str, object]:
+        if kind not in {"lesson", "script", "video"} or not comment.strip():
+            raise ValueError("Choose lesson, script, or video and enter feedback.")
+        if start_seconds is not None and (isinstance(start_seconds, bool) or not isinstance(start_seconds, int) or start_seconds < 0 or kind != "video"):
+            raise ValueError("Video timestamp must be a non-negative whole number.")
+        episode = self.get(episode_id)
+        if episode is None or revision < 1 or revision > episode.revision:
+            raise ValueError("Episode revision not found.")
+        created_at = now_utc()
+        with self._connection:
+            cursor = self._connection.execute(
+                "INSERT INTO artifact_feedback (episode_id, revision, kind, comment, reviewer_id, start_seconds, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id",
+                (episode_id, revision, kind, comment.strip(), reviewer_id, start_seconds, created_at),
+            )
+            feedback_id = cursor.fetchone()["id"]
+        return {"id": feedback_id, "episode_id": episode_id, "revision": revision, "kind": kind, "comment": comment.strip(), "reviewer_id": reviewer_id, "start_seconds": start_seconds, "created_at": created_at}
+
+    def feedback_for(self, episode_id: str) -> list[dict[str, object]]:
+        rows = self._connection.execute(
+            "SELECT id, episode_id, revision, kind, comment, reviewer_id, start_seconds, created_at FROM artifact_feedback WHERE episode_id = ? ORDER BY id DESC", (episode_id,)
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     def enqueue_job(
         self, job_id: str, kind: str, idempotency_key: str, payload: str = ""
     ) -> Job:
@@ -574,6 +597,16 @@ class EpisodeRepository:
               feedback TEXT NOT NULL DEFAULT '',
               criteria TEXT NOT NULL DEFAULT '[]',
               markers TEXT NOT NULL DEFAULT '[]',
+              created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS artifact_feedback (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              episode_id TEXT NOT NULL REFERENCES episodes(id),
+              revision INTEGER NOT NULL,
+              kind TEXT NOT NULL,
+              comment TEXT NOT NULL,
+              reviewer_id TEXT NOT NULL,
+              start_seconds INTEGER,
               created_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS revisions (

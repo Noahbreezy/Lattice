@@ -93,6 +93,11 @@ class PostgresEpisodeRepository(EpisodeRepository):
                 reviewer_id TEXT NOT NULL, feedback TEXT NOT NULL DEFAULT '',
                 criteria TEXT NOT NULL DEFAULT '[]', markers TEXT NOT NULL DEFAULT '[]',
                 created_at TEXT NOT NULL)""",
+            """CREATE TABLE IF NOT EXISTS artifact_feedback (
+                id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                episode_id TEXT NOT NULL REFERENCES episodes(id), revision INTEGER NOT NULL,
+                kind TEXT NOT NULL, comment TEXT NOT NULL, reviewer_id TEXT NOT NULL,
+                start_seconds INTEGER, created_at TEXT NOT NULL)""",
             """CREATE TABLE IF NOT EXISTS revisions (
                 episode_id TEXT NOT NULL REFERENCES episodes(id),
                 revision INTEGER NOT NULL CHECK (revision > 0), parent_revision INTEGER,
