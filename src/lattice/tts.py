@@ -7,9 +7,13 @@ import re
 import shutil
 import subprocess
 import tempfile
+import wave
+from array import array
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from importlib import import_module
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 
 from .contracts import SceneBeat, Storyboard, StoryboardScene
 
@@ -33,6 +37,12 @@ class TtsProvider(Protocol):
     def synthesize(self, text: str, output_path: str | Path) -> Narration:
         """Create a WAV narration and return timing metadata."""
         ...
+
+
+class _KokoroEngine(Protocol):
+    def create(
+        self, text: str, *, voice: str, speed: float, lang: str
+    ) -> tuple[Iterable[float], int]: ...
 
 
 def validate_narration(narration: Narration) -> Narration:
@@ -136,6 +146,61 @@ class PiperTts:
         if completed.returncode != 0:
             raise RuntimeError(f"Piper narration failed: {completed.stderr.strip()}")
         return validate_narration(_estimated_narration(output, text, "piper"))
+
+
+class KokoroTts:
+    """Offline Kokoro ONNX narration with a model loaded once per renderer."""
+
+    def __init__(
+        self,
+        model: str | Path,
+        voices: str | Path,
+        *,
+        voice: str = "am_michael",
+        speed: float = 1.0,
+    ) -> None:
+        self.model = Path(model)
+        self.voices = Path(voices)
+        self.voice = voice
+        self.speed = speed
+        self._engine: _KokoroEngine | None = None
+        if speed <= 0:
+            raise ValueError("Kokoro speed must be positive.")
+
+    def synthesize(self, text: str, output_path: str | Path) -> Narration:
+        if not text.strip():
+            raise ValueError("Cannot synthesize empty narration.")
+        for path in (self.model, self.voices):
+            if not path.is_file():
+                raise RuntimeError(f"Kokoro model file not found: {path}")
+        try:
+            constructor = cast(
+                Callable[[str, str], _KokoroEngine],
+                import_module("kokoro_onnx").__dict__["Kokoro"],
+            )
+        except ImportError as exc:
+            raise RuntimeError(
+                "Kokoro ONNX is not installed in this Python environment."
+            ) from exc
+        engine = self._engine
+        if engine is None:
+            engine = constructor(str(self.model), str(self.voices))
+            self._engine = engine
+        samples, sample_rate = engine.create(
+            text, voice=self.voice, speed=self.speed, lang="en-us"
+        )
+        pcm = array(
+            "h",
+            (round(max(-1.0, min(1.0, float(sample))) * 32767) for sample in samples),
+        )
+        output = Path(output_path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(output), "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(int(sample_rate))
+            wav.writeframes(pcm.tobytes())
+        return validate_narration(_estimated_narration(output, text, "kokoro-onnx"))
 
 
 class WindowsSpeechTts:

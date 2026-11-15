@@ -12,6 +12,7 @@ from .config import ProjectConfig
 from .contracts import Episode, EpisodeStatus, ReviewDecision
 from .evidence import build_review_evidence, write_review_evidence
 from .history import LessonHistory
+from .motion_graphics import MotionGraphicsRenderer
 from .persistence import EpisodeRepository, Job
 from .pipeline import (
     RenderProvider,
@@ -59,14 +60,15 @@ def _validate_local_capabilities(config: ProjectConfig, offline: bool) -> None:
     editor = tools.get("editor", {})
     editor_provider = str(editor.get("provider") or "ffmpeg").lower()
     if (
-        editor_provider not in {"ffmpeg", "local"}
+        editor_provider not in {"ffmpeg", "local", "motion-graphics"}
         and provider_factory("editor", editor_provider) is None
     ):
         raise ValueError(f"Unsupported editor provider: {editor_provider}")
     visual = tools.get("video generator", {})
     visual_provider = str(visual.get("provider") or "local").lower()
     if (
-        visual.get("required")
+        editor_provider != "motion-graphics"
+        and visual.get("required")
         and visual_provider not in {"local", "illustrated"}
         and provider_factory("visual", visual_provider) is None
     ):
@@ -78,12 +80,16 @@ def _validate_local_capabilities(config: ProjectConfig, offline: bool) -> None:
     narration = tools.get("narration", {})
     narration_provider = str(narration.get("provider") or "windows-sapi").lower()
     if (
-        narration_provider not in {"windows-sapi", "piper"}
+        narration_provider not in {"windows-sapi", "piper", "kokoro"}
         and provider_factory("narration", narration_provider) is None
     ):
         raise ValueError(f"Unsupported narration provider: {narration_provider}")
     if narration_provider == "piper" and not narration.get("model"):
         raise ValueError("A Piper narration provider requires a model path.")
+    if narration_provider == "kokoro" and (
+        not narration.get("model") or not narration.get("voices")
+    ):
+        raise ValueError("Kokoro narration requires model and voices paths.")
 
 
 def _configured_renderer(config: ProjectConfig, output: Path) -> RenderProvider:
@@ -92,6 +98,15 @@ def _configured_renderer(config: ProjectConfig, output: Path) -> RenderProvider:
     narration_name = str(narration.get("provider") or "windows-sapi").lower()
     if narration_name == "piper":
         tts = PiperTts(str(narration["model"]))
+    elif narration_name == "kokoro":
+        from .tts import KokoroTts
+
+        tts = KokoroTts(
+            str(narration["model"]),
+            str(narration["voices"]),
+            voice=str(narration.get("voice") or "am_michael"),
+            speed=float(narration.get("speed") or 1.0),
+        )
     elif narration_name == "windows-sapi":
         tts = WindowsSpeechTts(
             voice=str(narration.get("voice") or ""),
@@ -102,6 +117,18 @@ def _configured_renderer(config: ProjectConfig, output: Path) -> RenderProvider:
         if narration_factory is None:
             raise ValueError(f"Unsupported narration provider: {narration_name}")
         tts = narration_factory(config, narration)
+    editor = tools.get("editor", {})
+    editor_name = str(editor.get("provider") or "ffmpeg").lower()
+    if editor_name == "motion-graphics":
+        return MotionGraphicsRenderer(
+            output,
+            tts_provider=tts,
+            plan_path=str(editor["plan"]) if editor.get("plan") else None,
+            width=int(editor.get("width") or 720),
+            height=int(editor.get("height") or 1280),
+            fps=int(editor.get("fps") or 24),
+            bed_path=str(editor["bed"]) if editor.get("bed") else None,
+        )
     visual = tools.get("video generator", {})
     visual_name = str(visual.get("provider") or "local").lower()
     visual_factory = provider_factory("visual", visual_name)
@@ -110,8 +137,6 @@ def _configured_renderer(config: ProjectConfig, output: Path) -> RenderProvider:
         if visual_factory is not None
         else IllustratedVisualProvider()
     )
-    editor = tools.get("editor", {})
-    editor_name = str(editor.get("provider") or "ffmpeg").lower()
     editor_factory = provider_factory("editor", editor_name)
     if editor_factory is not None:
         return editor_factory(config, editor, output, tts, visual_adapter)
@@ -207,12 +232,16 @@ def run_next_episode(
                     )
                 elif stage == "run lesson and script quality checks":
                     if draft is None:
-                        raise RuntimeError("Lesson generation must precede quality checks.")
+                        raise RuntimeError(
+                            "Lesson generation must precede quality checks."
+                        )
                     if not offline:
                         require_script_quality(config, draft.research, draft.script)
                 elif stage == "create storyboard and local visual assets":
                     if draft is None:
-                        raise RuntimeError("Lesson generation must precede storyboard creation.")
+                        raise RuntimeError(
+                            "Lesson generation must precede storyboard creation."
+                        )
                     bundle = assemble_production_bundle(config, draft, review=rejection)
                     revision_dir.mkdir(parents=True, exist_ok=True)
                     artifact_path.write_text(
@@ -233,7 +262,9 @@ def run_next_episode(
                     )
                 elif stage == "render and caption video":
                     if bundle is None:
-                        raise RuntimeError("Storyboard creation must precede rendering.")
+                        raise RuntimeError(
+                            "Storyboard creation must precede rendering."
+                        )
                     renderer = (
                         renderer_factory(revision_dir / "rendered")
                         if renderer_factory is not None
@@ -281,6 +312,12 @@ def run_next_episode(
                         ("manifest.json", manifest_path),
                     ):
                         storage.put_file(f"{artifact_prefix}/{name}", path)
+                    for motion_plan in (revision_dir / "rendered").glob(
+                        "*.motion-plan.json"
+                    ):
+                        storage.put_file(
+                            f"{artifact_prefix}/motion-plan.json", motion_plan
+                        )
                     if isinstance(storage, LocalObjectStorage):
                         storage.put_file(
                             f"videos/{processing.id}/revision-{processing.revision}.manifest.json",
@@ -304,9 +341,9 @@ def run_next_episode(
                         repository,
                         storage,
                     )
-                elif (
-                    stage == "human quality review and revision"
-                    and (submitted is None or submitted.status != EpisodeStatus.AWAITING_REVIEW)
+                elif stage == "human quality review and revision" and (
+                    submitted is None
+                    or submitted.status != EpisodeStatus.AWAITING_REVIEW
                 ):
                     raise RuntimeError("Production did not enter the review queue.")
         except Exception:
