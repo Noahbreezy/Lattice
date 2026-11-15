@@ -74,6 +74,11 @@ script-derived final duration. `media_quality.py` validates the MP4 container,
 audio/video stream presence, vertical dimensions, and duration.
 `IllustratedVisualProvider` emits reusable SVG scene assets, while
 `regenerate_scenes` creates a new storyboard version only for selected scenes.
+The opt-in `motion-graphics` editor follows the same render job contract but
+synthesizes narration per storyboard beat, draws metric animation and captions
+with Pillow, and streams exact-duration frames to FFmpeg. It writes an editable
+JSON plan beside the video so visual values and labels can be revised without
+a video-generation model. Kokoro ONNX is an optional local narration adapter.
 Lesson providers implement an AI lesson capability and may optionally use a
 source provider for fact-checking. `quality.py` provides automated gates for
 lesson structure, section and lesson length, claim count, uncertainty labeling,

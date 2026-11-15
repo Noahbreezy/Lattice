@@ -10,6 +10,8 @@ requires-python = ">=3.11"
 
 [project.optional-dependencies]
 server = ["psycopg[binary]>=3.2,<4", "boto3>=1.35,<2"]
+motion = ["Pillow>=11,<13"]
+kokoro = ["kokoro-onnx>=0.6,<1; python_version < '3.14'"]
 
 [project.scripts]
 lattice-validate = "lattice.cli:main"

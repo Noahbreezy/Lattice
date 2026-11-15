@@ -203,6 +203,12 @@ The local FFmpeg renderer creates a real private MP4 from a successful render
 job. It creates labeled cause/mechanism/outcome diagrams and uses free local
 Windows SAPI narration by default, without credentials:
 
+For beat-synchronized, frame-drawn explainers, select the **motion graphics**
+editor mode instead. It can use local Kokoro ONNX narration, draws editable
+metric animations with Pillow, and exports an MP4, captions, and a reusable
+visual plan. See [Local motion graphics mode](docs/motion-graphics.md) for the
+configuration, model setup, and edit cycle.
+
 ```powershell
 $env:PYTHONPATH = "src"
 @'

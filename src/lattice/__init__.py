@@ -61,6 +61,7 @@ from .quality import (
     require_script_quality,
 )
 from .renderer import FfmpegRenderer
+from .motion_graphics import MotionGraphicsRenderer
 from .research import (
     AILesson,
     AILessonProvider,
@@ -77,6 +78,7 @@ from .review import QueueItem, ReviewQueue
 from .storage import LocalObjectStorage, StoredObject
 from .tts import (
     Narration,
+    KokoroTts,
     PiperTts,
     TtsProvider,
     WindowsSpeechTts,
@@ -100,6 +102,7 @@ __all__ = [
     "EpisodeRepository",
     "EpisodeStatus",
     "FfmpegRenderer",
+    "MotionGraphicsRenderer",
     "IllustratedVisualProvider",
     "Job",
     "LessonHistory",
@@ -109,6 +112,7 @@ __all__ = [
     "MediaIssue",
     "MediaReport",
     "Narration",
+    "KokoroTts",
     "OllamaLessonProvider",
     "PiperTts",
     "ProductionBundle",

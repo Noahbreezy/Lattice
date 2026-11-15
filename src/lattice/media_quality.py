@@ -87,9 +87,17 @@ def check_media(
     )
     if video is None:
         issues.append(MediaIssue("missing-video", "The file has no video stream."))
-    elif video.get("width") != 1080 or video.get("height") != 1920:
+    elif (
+        not isinstance(video.get("width"), int)
+        or not isinstance(video.get("height"), int)
+        or video["width"] < 720
+        or video["width"] * 16 != video["height"] * 9
+    ):
         issues.append(
-            MediaIssue("wrong-format", "Expected a 1080x1920 vertical video.")
+            MediaIssue(
+                "wrong-format",
+                "Expected a 9:16 vertical video at least 720 pixels wide.",
+            )
         )
     if audio is None:
         issues.append(MediaIssue("missing-audio", "The file has no audio stream."))
@@ -117,7 +125,8 @@ def check_media(
         and video is not None
         and metrics is not None
         and (
-            isinstance(sample_count, int) and sample_count < 2
+            isinstance(sample_count, int)
+            and sample_count < 2
             or metrics.get("max_abs_diff", 0) == 0
         )
     ):
